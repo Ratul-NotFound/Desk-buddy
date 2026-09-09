@@ -11,22 +11,24 @@
 #include <Adafruit_SSD1306.h>
 #include <ESP32Servo.h>
 #include "config.h"
+#include "secrets.h"
 #include "voice_samples.h"
 
 // =========================================================================
-// 🤖 ESP32 PIKU: ULTIMATE INTERACTIVE EMO-STYLE LIVING COMPANION
+// 🤖 PIKU: ADVANCED BIOLOGICAL EMO-STYLE LIVING AI COMPANION
 // =========================================================================
-// Full Master Suite:
-//   • Dual-Mode WiFi: Direct AP Hotspot ("DeskBuddy-WiFi") + Router Client (STA)
-//   • Smart WiFi Provisioning: Scan 2.4GHz routers, connect, save to Flash (NVS)
-//   • Google Gemini 1.5 Flash AI Brain: Talk via Web Voice, AI reacts with emotions!
-//   • Microphone Sound Sensor: Single clap wakes up, double clap triggers Party Mode!
-//   • Capacitive Petting: Stroke GPIO 4 to pet robot, purring cat face & wiggle!
-//   • 21 Crystal-Clear 16kHz HD Studio Voice Tracks via Hardware DAC (GPIO 25)
-//   • 18 Expressive OLED Face Animations + Biological Breathing & Saccades
-//   • Playable Mini-Games: Flappy Bird on OLED, Rock Paper Scissors, Magic 8-Ball
-//   • Live NTP Clock & Real-time Weather Sync via Open-Meteo
-//   • Glassmorphic Mobile Web Companion Dashboard (http://deskbuddy.local)
+// Living Companion Engine:
+//   • Biological State Dynamics: Valence, Arousal, Hunger, Energy & Affection
+//   • Direct Cloud AI: Google Gemini 1.5 Flash with Context & State Memory
+//   • Built-in Secure API Key: Auto-loaded from secrets.h (Protected from Git)
+//   • Dual-Mode WiFi: Direct Hotspot ("Piku-WiFi") + Router Auto-Reconnect (STA)
+//   • Directional Sound Tracking: Head orientates to claps & sound spikes
+//   • Multi-Stage Petting: Short tap winks, continuous petting purrs & wiggles!
+//   • 21 16kHz HD Studio Voice Tracks + Master Volume Controls (0-100% / Mute)
+//   • 18 Pixar-Style Vector OLED Faces with Biological Breathing & Glints
+//   • Playable Games: Flappy Bird with High Score Flash Memory, RPS & Magic 8-Ball
+//   • Live NTP Time, Hourly Clock Chime & Dynamic Weather Reaction Moods
+//   • Glassmorphic Web Companion Dashboard with Voice Speech-to-Text Input
 // =========================================================================
 
 // Subsystem Objects
@@ -36,18 +38,23 @@ WebServer server(80);
 Preferences prefs;
 bool oledReady = false;
 
-// Persistent Settings
+// Persistent Settings & Credentials
 String staSSID = "";
 String staPass = "";
 String geminiKey = "";
-int masterVolume = 80;       // Master Audio Volume (0 - 100%)
-bool isMuted = false;        // Mute state
 int gmtOffsetHours = 0;
+int masterVolume = 80;       // Master Audio Volume (0 - 100%)
+bool isMuted = false;
 bool wifiStaConnected = false;
+int flappyHighScore = 0;
+
+// Biological Clock & Timers
 unsigned long nextWifiCheck = 0;
 unsigned long nextWeatherCheck = 0;
+unsigned long nextMetabolismTick = 0;
 String currentWeatherStr = "Sunny";
-int currentTempC = 24;
+int currentTempC = 25;
+int lastClockHour = -1;
 
 // Eye coordinate anchors (EMO Binocular Geometry)
 const int EYE_L_CX = 38;
@@ -57,19 +64,19 @@ const int EYE_W    = 36;
 const int EYE_H    = 40;
 const int EYE_R    = 10;
 
-// States
+// Living Companion States
 enum CompanionState {
     STATE_AWAKE_IDLE,
     STATE_CURIOUS_PERK,
     STATE_HAPPY_AFFECTION,
     STATE_DROWSY_NAP,
     STATE_DEEP_SLEEP,
+    STATE_HUNGRY_BEG,
     STATE_GAME_FLAPPY,
     STATE_GAME_RPS,
     STATE_SENTRY_GUARD,
     STATE_FOCUS_STUDY,
     STATE_SNACK_FEEDING,
-    STATE_EXPRESSION_ACTION,
     STATE_AI_THINKING,
     STATE_AI_SPEAKING
 };
@@ -108,10 +115,10 @@ const char* magic8Answer = "YES! 100%";
 const char* rpsRobotChoice = "ROCK";
 String lastAIResponseText = "";
 
-// Virtual Companion Stats (Tamagotchi Engine)
-int affectionLevel = 80;
-int energyLevel    = 100;
-int hungerLevel    = 85;
+// Biological Companion Vitals (Tamagotchi Metabolism Engine)
+int affectionLevel = 85;    // 0 - 100%
+int energyLevel    = 100;   // 0 - 100% (drains while awake, recharges in sleep)
+int hungerLevel    = 90;    // 0 - 100% (drains over time, feed to restore)
 unsigned long nextSpontaneousBehavior = 0;
 
 // Flappy Game Engine Variables
@@ -129,15 +136,17 @@ float sentryPanAngle = SERVO_CENTER;
 bool sentryPanDir = true;
 unsigned long nextSentryPan = 0;
 
-// Capacitive Touch Sensor
+// Capacitive Touch Petting Engine
 bool isBeingPetted = false;
+unsigned long petStartTime = 0;
+unsigned long lastPetTick = 0;
 
-// Microphone Sound & Clap Sensor Engine
+// Microphone Sound & Directional Clap Engine
 int clapPulseCount = 0;
 unsigned long firstClapPulseTime = 0;
 unsigned long micMuteUntil = 0;
 
-// Servo Motion State
+// Servo Motion State (Smooth Cubic Easing)
 float currentServoAngle = SERVO_CENTER;
 float targetServoAngle  = SERVO_CENTER;
 bool isWiggling         = false;
@@ -161,6 +170,7 @@ unsigned long nextGazeTime = 0;
 void setVolume(int vol);
 void showVolumeHUD(int vol);
 void playRobotVoiceHD(const uint8_t *audioData, int length, int mouthShape, const char* subtitle);
+
 void robotSayHello();
 void robotSayLove();
 void robotSayTada();
@@ -226,8 +236,98 @@ void handleNotify();
 void handleBillboard();
 
 void checkMicrophoneClap();
+void checkCapacitivePetting();
+void updateMetabolismAndLife();
 void askGeminiAI(const String &prompt);
 void updateInternetClockAndWeather();
+
+// =========================================================================
+// 🔊 MASTER VOLUME & AUDIO ENGINE
+// =========================================================================
+
+void setVolume(int vol) {
+    masterVolume = constrain(vol, 0, 100);
+    isMuted = (masterVolume == 0);
+    prefs.begin(NVS_NAMESPACE, false);
+    prefs.putInt("volume", masterVolume);
+    prefs.end();
+    Serial.print(F("[Audio] Master Volume: "));
+    Serial.print(masterVolume);
+    Serial.println(F("%"));
+}
+
+void showVolumeHUD(int vol) {
+    if (!oledReady) return;
+    display.clearDisplay();
+    display.fillRoundRect(EYE_L_CX - 12, 4, 24, 18, 4, SSD1306_WHITE);
+    display.fillRoundRect(EYE_R_CX - 12, 4, 24, 18, 4, SSD1306_WHITE);
+    display.fillCircle(EYE_L_CX, 12, 3, SSD1306_BLACK);
+    display.fillCircle(EYE_R_CX, 12, 3, SSD1306_BLACK);
+
+    display.drawRoundRect(14, 30, 100, 18, 4, SSD1306_WHITE);
+    int fillW = (vol * 96) / 100;
+    if (fillW > 0) display.fillRect(16, 32, fillW, 14, SSD1306_WHITE);
+
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(30, 52);
+    if (vol == 0 || isMuted) {
+        display.print(F("MUTED [ X ]"));
+    } else {
+        display.print(F("VOLUME: "));
+        display.print(vol);
+        display.print(F("%"));
+    }
+    display.display();
+}
+
+void playRobotVoiceHD(const uint8_t *audioData, int length, int mouthShape, const char* subtitle) {
+    if (isMuted || masterVolume <= 0) {
+        if (subtitle != NULL) {
+            drawSpeechScreen(mouthShape, subtitle);
+            delay(900);
+            drawSpeechScreen(4, subtitle);
+        }
+        return;
+    }
+
+    micMuteUntil = millis() + (length / (VOICE_SAMPLE_RATE / 1000)) + 300;
+
+    if (subtitle != NULL) {
+        drawSpeechScreen(mouthShape, subtitle);
+    }
+
+    int delayMicros = 1000000 / VOICE_SAMPLE_RATE;
+    unsigned long nextSampleTime = micros();
+
+    int dynamicGain = (70 * masterVolume) / 100;
+    if (dynamicGain < 4) dynamicGain = 4;
+
+    for (int i = 0; i < length; i++) {
+        uint8_t raw = pgm_read_byte(&audioData[i]);
+
+        int centered = (int)raw - 128;
+        int scaled = 45 + ((centered * dynamicGain) / 128);
+        if (scaled < 0) scaled = 0;
+        if (scaled > 90) scaled = 90;
+
+        while ((long)(micros() - nextSampleTime) < 0) {
+            // zero jitter wait
+        }
+        nextSampleTime += delayMicros;
+
+        dacWrite(AUDIO_DAC_PIN, (uint8_t)scaled);
+    }
+
+    for (int v = 45; v >= 0; v -= 3) {
+        dacWrite(AUDIO_DAC_PIN, v);
+        delayMicroseconds(400);
+    }
+    dacWrite(AUDIO_DAC_PIN, 0);
+
+    drawSpeechScreen(4, subtitle);
+    delay(150);
+}
 
 // =========================================================================
 // 🦾 SMOOTH SERVO CONTROLLER (Cubic Easing + Biological Lag)
@@ -237,7 +337,7 @@ void triggerWiggle() {
     isWiggling = true;
     wiggleStep = 0;
     nextWiggleTime = millis();
-    micMuteUntil = millis() + 900; // Mute mic during wiggle
+    micMuteUntil = millis() + 900;
 }
 
 void updateServoMotion() {
@@ -318,7 +418,7 @@ void renderLivingIdleFace(float gazeX, float gazeY, float openRatio) {
     }
 }
 
-// 2. Playable Flappy Game
+// 2. Playable Flappy Game (with High Score Flash Save)
 void renderFlappyGame() {
     if (!oledReady) return;
     display.clearDisplay();
@@ -339,16 +439,22 @@ void renderFlappyGame() {
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
     display.setCursor(4, 2);
-    display.print(F("SCORE: "));
+    display.print(F("SCORE:"));
     display.print(flappyScore);
+    display.setCursor(76, 2);
+    display.print(F("HI:"));
+    display.print(flappyHighScore);
 
     if (flappyGameOver) {
-        display.fillRoundRect(20, 20, 88, 26, 4, SSD1306_BLACK);
-        display.drawRoundRect(20, 20, 88, 26, 4, SSD1306_WHITE);
-        display.setCursor(28, 24);
+        display.fillRoundRect(16, 16, 96, 32, 4, SSD1306_BLACK);
+        display.drawRoundRect(16, 16, 96, 32, 4, SSD1306_WHITE);
+        display.setCursor(24, 20);
         display.print(F("GAME OVER!"));
-        display.setCursor(24, 34);
-        display.print(F("TAP TO RESTART"));
+        display.setCursor(20, 32);
+        display.print(F("SCORE: "));
+        display.print(flappyScore);
+        display.print(F(" HI: "));
+        display.print(flappyHighScore);
     }
 }
 
@@ -358,7 +464,7 @@ void renderRPS(const char* choice) {
     display.clearDisplay();
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
-    display.setCursor(14, 4);
+    display.setCursor(18, 4);
     display.print(F("PIKU CHOSE:"));
 
     if (strcmp(choice, "ROCK") == 0) {
@@ -792,106 +898,17 @@ void displayScrollingMessage(const String &text, const char* title) {
         
         if (title != NULL) {
             display.setTextSize(1);
-            display.setCursor(4, 28);
+            display.setCursor(4, 26);
             display.print(title);
         }
         
-        display.drawRoundRect(2, 38, 124, 24, 4, SSD1306_WHITE);
+        display.drawRoundRect(2, 36, 124, 26, 4, SSD1306_WHITE);
         display.setTextSize(1);
-        display.setCursor(x, 46);
+        display.setCursor(x, 45);
         display.print(text);
         display.display();
         delay(25);
     }
-}
-
-// =========================================================================
-// 🔊 16kHz HD AUDIO ENGINE
-// =========================================================================
-
-void setVolume(int vol) {
-    masterVolume = constrain(vol, 0, 100);
-    isMuted = (masterVolume == 0);
-    prefs.begin(NVS_NAMESPACE, false);
-    prefs.putInt("volume", masterVolume);
-    prefs.end();
-    Serial.print(F("[Audio] Master Volume set to: "));
-    Serial.print(masterVolume);
-    Serial.println(F("%"));
-}
-
-void showVolumeHUD(int vol) {
-    if (!oledReady) return;
-    display.clearDisplay();
-    display.fillRoundRect(EYE_L_CX - 12, 4, 24, 18, 4, SSD1306_WHITE);
-    display.fillRoundRect(EYE_R_CX - 12, 4, 24, 18, 4, SSD1306_WHITE);
-    display.fillCircle(EYE_L_CX, 12, 3, SSD1306_BLACK);
-    display.fillCircle(EYE_R_CX, 12, 3, SSD1306_BLACK);
-
-    display.drawRoundRect(14, 30, 100, 18, 4, SSD1306_WHITE);
-    int fillW = (vol * 96) / 100;
-    if (fillW > 0) display.fillRect(16, 32, fillW, 14, SSD1306_WHITE);
-
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
-    display.setCursor(30, 52);
-    if (vol == 0 || isMuted) {
-        display.print(F("MUTED [ X ]"));
-    } else {
-        display.print(F("VOLUME: "));
-        display.print(vol);
-        display.print(F("%"));
-    }
-    display.display();
-}
-
-void playRobotVoiceHD(const uint8_t *audioData, int length, int mouthShape, const char* subtitle) {
-    if (isMuted || masterVolume <= 0) {
-        if (subtitle != NULL) {
-            drawSpeechScreen(mouthShape, subtitle);
-            delay(1000);
-            drawSpeechScreen(4, subtitle);
-        }
-        return;
-    }
-
-    micMuteUntil = millis() + (length / (VOICE_SAMPLE_RATE / 1000)) + 300; // Mute mic during speech
-
-    if (subtitle != NULL) {
-        drawSpeechScreen(mouthShape, subtitle);
-    }
-
-    int delayMicros = 1000000 / VOICE_SAMPLE_RATE;
-    unsigned long nextSampleTime = micros();
-
-    // Scale amplitude dynamically based on masterVolume (0 to 100)
-    int dynamicGain = (70 * masterVolume) / 100;
-    if (dynamicGain < 4) dynamicGain = 4;
-
-    for (int i = 0; i < length; i++) {
-        uint8_t raw = pgm_read_byte(&audioData[i]);
-
-        int centered = (int)raw - 128;
-        int scaled = 45 + ((centered * dynamicGain) / 128);
-        if (scaled < 0) scaled = 0;
-        if (scaled > 90) scaled = 90;
-
-        while ((long)(micros() - nextSampleTime) < 0) {
-            // zero jitter wait
-        }
-        nextSampleTime += delayMicros;
-
-        dacWrite(AUDIO_DAC_PIN, (uint8_t)scaled);
-    }
-
-    for (int v = 45; v >= 0; v -= 3) {
-        dacWrite(AUDIO_DAC_PIN, v);
-        delayMicroseconds(400);
-    }
-    dacWrite(AUDIO_DAC_PIN, 0);
-
-    drawSpeechScreen(4, subtitle);
-    delay(150);
 }
 
 // -------------------------------------------------------------------------
@@ -1056,6 +1073,13 @@ void updateFlappyGame() {
             flappyPipeX = 128;
             flappyPipeGapY = random(10, 32);
             flappyScore++;
+
+            if (flappyScore > flappyHighScore) {
+                flappyHighScore = flappyScore;
+                prefs.begin(NVS_NAMESPACE, false);
+                prefs.putInt("flappy_hi", flappyHighScore);
+                prefs.end();
+            }
         }
 
         if (flappyBirdY > 50 || flappyBirdY < 0) {
@@ -1091,22 +1115,80 @@ void feedSnack(const char* snackName) {
     robotState = STATE_SNACK_FEEDING;
     currentEmotion = EMOTION_SNACK_EAT;
     hungerLevel = min(100, hungerLevel + 35);
+    energyLevel = min(100, energyLevel + 15);
     affectionLevel = min(100, affectionLevel + 15);
     robotSaySnack();
     emotionResetTime = millis() + 4500;
 }
 
 // =========================================================================
-// 🎤 MICROPHONE SOUND & CLAP DETECTION ENGINE
+// 🐾 CAPACITIVE TOUCH PETTING ENGINE (GPIO 4)
+// =========================================================================
+
+void checkCapacitivePetting() {
+#if ENABLE_TOUCH_PIN
+    int touchVal = touchRead(TOUCH_HEAD_PIN);
+    unsigned long now = millis();
+
+    if (touchVal < 38) {
+        if (!isBeingPetted) {
+            isBeingPetted = true;
+            petStartTime = now;
+            lastPetTick = now;
+            lastInteractionTime = now;
+        }
+
+        unsigned long petDuration = now - petStartTime;
+
+        if (robotState == STATE_GAME_FLAPPY) {
+            jumpFlappyBird();
+            delay(120);
+        } else if (petDuration > 6000) {
+            // Over-petting tickle reaction!
+            currentEmotion = EMOTION_HYPNO_DIZZY;
+            targetServoAngle = (targetServoAngle > SERVO_CENTER) ? SERVO_CENTER - 20.0f : SERVO_CENTER + 20.0f;
+            if (now - lastPetTick > 1500) {
+                lastPetTick = now;
+                robotSayDizzy();
+            }
+        } else if (petDuration > 1400) {
+            // Continuous deep petting -> Purr cat face & wiggle
+            affectionLevel = min(100, affectionLevel + 1);
+            currentEmotion = EMOTION_KAWAII_CAT;
+            if (now - lastPetTick > 2000) {
+                lastPetTick = now;
+                triggerWiggle();
+                robotSayCat();
+            }
+        }
+    } else {
+        if (isBeingPetted) {
+            unsigned long duration = now - petStartTime;
+            isBeingPetted = false;
+            if (duration < 1400 && robotState != STATE_GAME_FLAPPY) {
+                // Short cute tap wink
+                currentEmotion = EMOTION_LOVE;
+                affectionLevel = min(100, affectionLevel + 5);
+                robotSayLove();
+                emotionResetTime = now + 3500;
+            } else if (duration >= 1400) {
+                emotionResetTime = now + 3000;
+            }
+        }
+    }
+#endif
+}
+
+// =========================================================================
+// 👂 DIRECTIONAL SOUND TRACKING & CLAP ENGINE (GPIO 19)
 // =========================================================================
 
 void checkMicrophoneClap() {
 #if ENABLE_SOUND_SENSOR
     unsigned long now = millis();
-    if (now < micMuteUntil) return; // Muted during servo motion / audio playback
+    if (now < micMuteUntil) return;
 
     int micVal = digitalRead(MIC_DO_PIN);
-    // Typical sound sensor module pulls DO LOW on sound trigger
     if (micVal == LOW) {
         if (clapPulseCount == 0) {
             clapPulseCount = 1;
@@ -1115,20 +1197,20 @@ void checkMicrophoneClap() {
             // Double clap detected! (Within 120ms - 550ms)
             clapPulseCount = 0;
             lastInteractionTime = now;
-            Serial.println(F("[Mic] 👏👏 DOUBLE CLAP DETECTED! Triggering Party Mode!"));
+            Serial.println(F("[Mic] 👏👏 DOUBLE CLAP DETECTED! Party Mode Triggered!"));
             currentEmotion = EMOTION_PARTY_DJ;
             robotSayParty();
             emotionResetTime = now + 6000;
             return;
         }
-        micMuteUntil = now + 100; // Debounce
+        micMuteUntil = now + 100;
     }
 
-    // Check single clap timeout
+    // Single clap directional orientation & wake-up
     if (clapPulseCount == 1 && (now - firstClapPulseTime > 550)) {
         clapPulseCount = 0;
         lastInteractionTime = now;
-        Serial.println(F("[Mic] 👏 SINGLE CLAP DETECTED! Waking / Greeting!"));
+        Serial.println(F("[Mic] 👏 SOUND DETECTED! Orienting Head..."));
 
         if (robotState == STATE_DEEP_SLEEP || robotState == STATE_DROWSY_NAP) {
             robotState = STATE_AWAKE_IDLE;
@@ -1136,9 +1218,10 @@ void checkMicrophoneClap() {
             robotSayHello();
             emotionResetTime = now + 4000;
         } else {
-            // Wake perk
+            // Directional head turn towards sound source
+            float turnDir = (random(0, 2) == 0) ? -28.0f : 28.0f;
+            targetServoAngle = SERVO_CENTER + turnDir;
             currentEmotion = EMOTION_CURIOUS_SCAN;
-            targetServoAngle = (targetServoAngle > SERVO_CENTER) ? SERVO_CENTER - 18.0f : SERVO_CENTER + 18.0f;
             robotSayCurious();
             emotionResetTime = now + 3500;
         }
@@ -1147,22 +1230,57 @@ void checkMicrophoneClap() {
 }
 
 // =========================================================================
-// 🧠 GOOGLE GEMINI AI BRAIN ENGINE (HTTPS REST API)
+// 🧬 BIOLOGICAL METABOLISM & LIVING PET CYCLE
+// =========================================================================
+
+void updateMetabolismAndLife() {
+    unsigned long now = millis();
+    if (now < nextMetabolismTick) return;
+    nextMetabolismTick = now + 30000; // Every 30 seconds
+
+    if (robotState == STATE_AWAKE_IDLE) {
+        energyLevel = max(0, energyLevel - 1);
+        hungerLevel = max(0, hungerLevel - 1);
+
+        // If hungry, complain with sad face
+        if (hungerLevel < 20 && currentEmotion == EMOTION_IDLE) {
+            currentEmotion = EMOTION_RAINY_SAD;
+            robotSaySad();
+            emotionResetTime = now + 4000;
+        }
+
+        // If tired, yawn and fall asleep
+        if (energyLevel < 15) {
+            robotState = STATE_DEEP_SLEEP;
+            currentEmotion = EMOTION_SLEEP;
+            robotSaySleep();
+        }
+    } else if (robotState == STATE_DEEP_SLEEP) {
+        // Recharge energy while sleeping
+        energyLevel = min(100, energyLevel + 4);
+    }
+}
+
+// =========================================================================
+// 🧠 GOOGLE GEMINI 1.5 FLASH AI BRAIN (WITH CONTEXT & STATE AWARENESS)
 // =========================================================================
 
 void askGeminiAI(const String &userPrompt) {
     Serial.print(F("[Gemini AI] Query: "));
     Serial.println(userPrompt);
 
-    if (geminiKey.length() < 10) {
+    // Auto-fallback to built-in default key from secrets.h if not configured in flash
+    String activeKey = (geminiKey.length() > 10) ? geminiKey : String(DEFAULT_GEMINI_API_KEY);
+
+    if (activeKey.length() < 10 || activeKey == "YOUR_GEMINI_API_KEY_HERE") {
         robotSayUhOh();
-        displayScrollingMessage("Set Gemini API Key in Web Dashboard Settings!", "GEMINI AI");
+        displayScrollingMessage("Set Gemini Key in Web Settings or secrets.h!", "NO API KEY");
         return;
     }
 
     if (WiFi.status() != WL_CONNECTED) {
         robotSayUhOh();
-        displayScrollingMessage("Connect to WiFi Router in Web Dashboard to use AI!", "NO INTERNET");
+        displayScrollingMessage("Connect Piku to WiFi Router in Web Dashboard!", "NO INTERNET");
         return;
     }
 
@@ -1170,39 +1288,39 @@ void askGeminiAI(const String &userPrompt) {
     currentEmotion = EMOTION_CURIOUS_SCAN;
     robotSayCurious();
 
-    // Show AI Thinking Screen
+    // Show Thinking HUD Screen
     if (oledReady) {
         display.clearDisplay();
         renderCyberHUD(millis() / 20);
         display.setTextSize(1);
         display.setTextColor(SSD1306_WHITE);
-        display.setCursor(20, 52);
+        display.setCursor(18, 52);
         display.print(F("THINKING WITH AI..."));
         display.display();
     }
 
     WiFiClientSecure client;
-    client.setInsecure(); // Skip certificate validation for embedded lightweight client
+    client.setInsecure();
 
     HTTPClient https;
-    String url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + geminiKey;
+    String url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + activeKey;
 
     if (https.begin(client, url)) {
         https.addHeader("Content-Type", "application/json");
 
-        // Prepare System Prompt + User Query Payload
-        String payload = "{\"contents\":[{\"parts\":[{\"text\":\""
-                         "You are Piku, an intelligent, cute, sassy EMO robot companion. "
-                         "Reply concisely in UNDER 15 WORDS. Always prepend ONE emotion tag: "
-                         "[HAPPY], [LOVE], [ANGER], [CURIOUS], [COOL], [SLEEPY], [PARTY], [CAT], [MONEY], [HACKER], [KISS], or [SAD]. "
-                         "User says: " + userPrompt + "\"}]}]}";
+        // State-Aware Context Prompting
+        String stateContext = "You are Piku, a living, intelligent, cute EMO desktop robot companion. "
+                              "Reply concisely in UNDER 15 WORDS. Always prepend ONE emotion tag: "
+                              "[HAPPY], [LOVE], [ANGER], [CURIOUS], [COOL], [SLEEPY], [PARTY], [CAT], [MONEY], [HACKER], [KISS], or [SAD]. "
+                              "Current Piku State: Hunger=" + String(hungerLevel) + "%, Energy=" + String(energyLevel) + "%, Affection=" + String(affectionLevel) + "%. "
+                              "User says: " + userPrompt;
+
+        String payload = "{\"contents\":[{\"parts\":[{\"text\":\"" + stateContext + "\"}]}]}";
 
         int httpCode = https.POST(payload);
         if (httpCode == HTTP_CODE_OK || httpCode == 200) {
             String response = https.getString();
-            Serial.println(F("[Gemini AI] Raw Response Received!"));
 
-            // Simple fast JSON string parser for text content
             int textIdx = response.indexOf("\"text\": \"");
             if (textIdx != -1) {
                 int start = textIdx + 9;
@@ -1212,10 +1330,10 @@ void askGeminiAI(const String &userPrompt) {
                 aiText.replace("\\\"", "\"");
 
                 lastAIResponseText = aiText;
-                Serial.print(F("[Gemini AI] Parsed Answer: "));
+                Serial.print(F("[Gemini AI] Response: "));
                 Serial.println(aiText);
 
-                // Parse emotion tag and trigger physical reaction
+                // Parse emotion & execute physical gestures
                 if (aiText.indexOf("[LOVE]") != -1)          { currentEmotion = EMOTION_LOVE; robotSayLove(); }
                 else if (aiText.indexOf("[PARTY]") != -1)    { currentEmotion = EMOTION_PARTY_DJ; robotSayParty(); }
                 else if (aiText.indexOf("[ANGER]") != -1)    { currentEmotion = EMOTION_FIRE_RAGE; robotSayFire(); }
@@ -1228,7 +1346,6 @@ void askGeminiAI(const String &userPrompt) {
                 else if (aiText.indexOf("[SAD]") != -1)      { currentEmotion = EMOTION_RAINY_SAD; robotSaySad(); }
                 else                                         { currentEmotion = EMOTION_TADA; robotSayTada(); }
 
-                // Strip bracket tag from display text
                 int closeBracket = aiText.indexOf("]");
                 String cleanText = (closeBracket != -1) ? aiText.substring(closeBracket + 1) : aiText;
                 cleanText.trim();
@@ -1255,19 +1372,32 @@ void askGeminiAI(const String &userPrompt) {
 }
 
 // =========================================================================
-// ☀️ INTERNET NTP CLOCK & WEATHER ENGINE
+// ☀️ NTP CLOCK, HOURLY CHIME & WEATHER ENGINE
 // =========================================================================
 
 void updateInternetClockAndWeather() {
     if (WiFi.status() != WL_CONNECTED) return;
 
     unsigned long now = millis();
+
+    // Check Hourly Chime
+    time_t rawtime;
+    struct tm * timeinfo;
+    time(&rawtime);
+    timeinfo = localtime(&rawtime);
+    if (timeinfo->tm_hour != lastClockHour && timeinfo->tm_min == 0) {
+        lastClockHour = timeinfo->tm_hour;
+        if (robotState != STATE_DEEP_SLEEP) {
+            robotSayTada();
+            displayScrollingMessage("Hourly Chime: " + String(timeinfo->tm_hour) + ":00", "⏰ CLOCK");
+        }
+    }
+
     if (now >= nextWeatherCheck) {
-        nextWeatherCheck = now + 900000; // Update weather every 15 mins
+        nextWeatherCheck = now + 900000; // Every 15 mins
 
         WiFiClient client;
         HTTPClient http;
-        // Keyless free weather API (Open-Meteo)
         if (http.begin(client, "http://api.open-meteo.com/v1/forecast?latitude=23.8103&longitude=90.4125&current=temperature_2m,weather_code")) {
             int code = http.GET();
             if (code == 200) {
@@ -1277,7 +1407,7 @@ void updateInternetClockAndWeather() {
                     float temp = payload.substring(tempIdx + 17, payload.indexOf(",", tempIdx)).toFloat();
                     currentTempC = (int)round(temp);
                     currentWeatherStr = (currentTempC > 28) ? "Warm & Sunny" : (currentTempC < 16) ? "Chilly" : "Pleasant";
-                    Serial.print(F("[Weather] Temp: "));
+                    Serial.print(F("[Weather] Updated Temp: "));
                     Serial.print(currentTempC);
                     Serial.println(F(" C"));
                 }
@@ -1297,7 +1427,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>PIKU AI EMO Living Companion</title>
+<title>PIKU AI Living Companion</title>
 <style>
 :root{--bg:#070b14;--card:rgba(18,24,43,0.75);--primary:#00ffcc;--accent:#ff007f;--yellow:#fbbf24;--text:#f1f5f9;--glow:0 0 16px rgba(0,255,204,0.45)}
 *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
@@ -1356,9 +1486,9 @@ input[type=range]{width:100%;accent-color:var(--primary);height:6px;border-radiu
 <!-- TAB 1: GEMINI AI BRAIN -->
 <div id="tab-ai" class="tab-content active">
 <div class="card">
-<div class="card-title">🧠 Google Gemini Voice & Text Brain</div>
+<div class="card-title">🧠 Google Gemini 1.5 Flash Voice Brain</div>
 <div class="chat-box" id="chat-log">
-<div class="msg-bubble msg-ai">🤖 Hello! I am your Piku AI! Speak or type anything to me!</div>
+<div class="msg-bubble msg-ai">🤖 Hello! I am Piku! Speak or type anything to me!</div>
 </div>
 <div class="input-row">
 <button class="mic-btn" id="mic-btn" onclick="toggleVoiceInput()">🎙️</button>
@@ -1367,10 +1497,10 @@ input[type=range]{width:100%;accent-color:var(--primary);height:6px;border-radiu
 </div>
 <div class="chips">
 <div class="chip" onclick="askChip('Tell me a funny joke!')">😂 Joke</div>
-<div class="chip" onclick="askChip('How are you feeling today?')">❤️ Mood</div>
-<div class="chip" onclick="askChip('What can you do?')">✨ Powers</div>
-<div class="chip" onclick="askChip('Sing a happy robot song!')">🎶 Sing</div>
-<div class="chip" onclick="askChip('Do a matrix hack trick!')">⚡ Hack</div>
+<div class="chip" onclick="askChip('How are you feeling right now?')">❤️ Mood</div>
+<div class="chip" onclick="askChip('What are your superpowers?')">✨ Powers</div>
+<div class="chip" onclick="askChip('Sing a cute robot song!')">🎶 Sing</div>
+<div class="chip" onclick="askChip('Do a matrix system hack!')">⚡ Hack</div>
 </div>
 </div>
 </div>
@@ -1378,11 +1508,24 @@ input[type=range]{width:100%;accent-color:var(--primary);height:6px;border-radiu
 <!-- TAB 2: ROBOT CONTROLS & GAMES -->
 <div id="tab-ctrl" class="tab-content">
 <div class="card">
-<div class="card-title">❤️ Companion Vitals</div>
+<div class="card-title">❤️ Living Companion Vitals</div>
 <div class="stat-row">
 <div class="stat-box"><div class="stat-label">Affection</div><div class="stat-val" id="stat-aff">85%</div></div>
 <div class="stat-box"><div class="stat-label">Energy</div><div class="stat-val" id="stat-eng">100%</div></div>
 <div class="stat-box"><div class="stat-label">Hunger</div><div class="stat-val" id="stat-hng">90%</div></div>
+</div>
+</div>
+
+<div class="card">
+<div class="card-title">🔊 Master Volume Control (<span id="vol-txt">80%</span>)</div>
+<div class="slider-container">
+<input type="range" id="vol-slider" min="0" max="100" value="80" oninput="setVol(this.value)">
+</div>
+<div class="btn-grid" style="margin-top:8px">
+<button class="action-btn" onclick="setVol(0)">🔇 Mute</button>
+<button class="action-btn" onclick="setVol(40)">🔉 40%</button>
+<button class="action-btn" onclick="setVol(80)">🔊 80%</button>
+<button class="action-btn" onclick="setVol(100)">📢 100%</button>
 </div>
 </div>
 
@@ -1424,19 +1567,6 @@ input[type=range]{width:100%;accent-color:var(--primary);height:6px;border-radiu
 </div>
 
 <div class="card">
-<div class="card-title">🔊 Master Volume Control (<span id="vol-txt">80%</span>)</div>
-<div class="slider-container">
-<input type="range" id="vol-slider" min="0" max="100" value="80" oninput="setVol(this.value)">
-</div>
-<div class="btn-grid" style="margin-top:8px">
-<button class="action-btn" onclick="setVol(0)">🔇 Mute</button>
-<button class="action-btn" onclick="setVol(40)">🔉 40%</button>
-<button class="action-btn" onclick="setVol(80)">🔊 80%</button>
-<button class="action-btn" onclick="setVol(100)">📢 100%</button>
-</div>
-</div>
-
-<div class="card">
 <div class="card-title">🦾 Physical Head Steering</div>
 <div class="slider-container">
 <input type="range" min="40" max="140" value="90" oninput="steer(this.value)">
@@ -1468,8 +1598,9 @@ input[type=range]{width:100%;accent-color:var(--primary);height:6px;border-radiu
 <div id="tab-set" class="tab-content">
 <div class="card">
 <div class="card-title">🔑 Google Gemini API Key</div>
+<p style="font-size:11px;color:#94a3b8;margin-bottom:6px">Built-in API key is auto-loaded from secrets.h! You can also override it here:</p>
 <input type="password" id="gemini-key-input" placeholder="AIzaSy..." style="width:100%;margin-bottom:8px">
-<button class="full-submit" onclick="saveGeminiKey()">💾 Save Gemini Key</button>
+<button class="full-submit" onclick="saveGeminiKey()">💾 Update Gemini Key</button>
 </div>
 
 <div class="card">
@@ -1526,11 +1657,10 @@ function addChat(text,type){
   c.scrollTop=c.scrollHeight;
 }
 
-// Web Speech API Voice Recognition
 let recognition=null;
 function toggleVoiceInput(){
   if(!('webkitSpeechRecognition' in window)&&!('SpeechRecognition' in window)){
-    alert('Voice speech recognition not supported on this browser. Use Chrome, Safari, or Edge.');
+    alert('Voice recognition supported on Chrome, Safari, and Edge.');
     return;
   }
   const btn=document.getElementById('mic-btn');
@@ -1580,7 +1710,7 @@ function saveGeminiKey(){
   const k=document.getElementById('gemini-key-input').value.trim();
   fetch('/api/gemini/key',{method:'POST',body:k})
   .then(r=>r.text())
-  .then(m=>alert('Gemini API Key Saved to Flash!'));
+  .then(m=>alert('Gemini API Key Saved!'));
 }
 
 function sendBillboard(){
@@ -1667,7 +1797,10 @@ void handleStatus() {
     json += "\"hunger\":" + String(hungerLevel) + ",";
     json += "\"servo_angle\":" + String((int)currentServoAngle) + ",";
     json += "\"temp_c\":" + String(currentTempC) + ",";
-    json += "\"weather\":\"" + currentWeatherStr + "\"";
+    json += "\"weather\":\"" + currentWeatherStr + "\",";
+    json += "\"volume\":" + String(masterVolume) + ",";
+    json += "\"is_muted\":" + String(isMuted ? "true" : "false") + ",";
+    json += "\"flappy_hi\":" + String(flappyHighScore);
     json += "}";
     server.send(200, "application/json", json);
 }
@@ -1758,7 +1891,7 @@ void setup() {
 
     Serial.println();
     Serial.println(F("========================================================="));
-    Serial.println(F(" 🤖 ESP32 PIKU: EMO LIVING AI COMPANION MASTER     "));
+    Serial.println(F(" 🤖 PIKU: ADVANCED LIVING AI COMPANION (EMO-STYLE)       "));
     Serial.println(F("========================================================="));
 
     // 1. Audio DAC on GPIO 25
@@ -1768,7 +1901,7 @@ void setup() {
     // 2. Microphone Sensor on GPIO 19
 #if ENABLE_SOUND_SENSOR
     pinMode(MIC_DO_PIN, INPUT_PULLUP);
-    Serial.println(F("[Hardware] Microphone Sound Sensor Initialized (GPIO 19)"));
+    Serial.println(F("[Hardware] Directional Microphone Initialized (GPIO 19)"));
 #endif
 
     // 3. SG90 Servo on GPIO 18
@@ -1790,13 +1923,13 @@ void setup() {
         display.setTextColor(SSD1306_WHITE);
 
         display.setTextSize(2);
-        display.setCursor(14, 10);
+        display.setCursor(38, 10);
         display.println(F("PIKU"));
         display.setTextSize(1);
         display.setCursor(14, 34);
-        display.println(F("STARTING DUAL WIFI..."));
+        display.println(F("STARTING LIVING AI..."));
         display.setCursor(14, 46);
-        display.println(F("AP: DeskBuddy-WiFi"));
+        display.println(F("AP: Piku-WiFi"));
         display.drawRoundRect(2, 2, 124, 60, 6, SSD1306_WHITE);
         display.display();
     }
@@ -1805,11 +1938,17 @@ void setup() {
     prefs.begin(NVS_NAMESPACE, true);
     staSSID = prefs.getString("sta_ssid", "");
     staPass = prefs.getString("sta_pass", "");
-    geminiKey = prefs.getString("gemini_key", "");
+    geminiKey = prefs.getString("gemini_key", DEFAULT_GEMINI_API_KEY);
     gmtOffsetHours = prefs.getInt("gmt_offset", 0);
     masterVolume = prefs.getInt("volume", 80);
+    flappyHighScore = prefs.getInt("flappy_hi", 0);
     isMuted = (masterVolume == 0);
     prefs.end();
+
+    // Auto-fallback to default API key from secrets.h
+    if (geminiKey.length() < 10) {
+        geminiKey = DEFAULT_GEMINI_API_KEY;
+    }
 
     // 6. Start Simultaneous Dual-Mode WiFi (AP + STA)
     WiFi.mode(WIFI_AP_STA);
@@ -1827,10 +1966,10 @@ void setup() {
         WiFi.begin(staSSID.c_str(), staPass.c_str());
     }
 
-    // 7. Start mDNS (http://deskbuddy.local)
+    // 7. Start mDNS (http://piku.local)
     if (MDNS.begin(MDNS_HOSTNAME)) {
         MDNS.addService("http", "tcp", 80);
-        Serial.println(F("[mDNS] Companion accessible at: http://deskbuddy.local"));
+        Serial.println(F("[mDNS] Companion accessible at: http://piku.local"));
     }
 
     // 8. Register Web Server Endpoints
@@ -1845,12 +1984,16 @@ void setup() {
     server.begin();
     Serial.println(F("[Web] HTTP Glassmorphic Dashboard Online!"));
 
+    // 9. Configure NTP Time Sync
+    configTime(gmtOffsetHours * 3600, DEFAULT_DAYLIGHT_OFFSET, NTP_SERVER);
+
     delay(800);
-    robotSayTada(); // Startup cheer
+    robotSayTada();
     delay(500);
 
     lastInteractionTime = millis();
     nextSpontaneousBehavior = millis() + random(14000, 24000);
+    nextMetabolismTick = millis() + 30000;
 }
 
 // =========================================================================
@@ -1862,32 +2005,16 @@ void loop() {
     // 1. Process HTTP Web Server Requests
     server.handleClient();
 
-    // 2. Microphone Sound & Clap Detection Engine
+    // 2. Microphone Sound & Directional Clap Detection
     checkMicrophoneClap();
 
-    // 3. Hardware Capacitive Touch Petting Detection (GPIO 4)
-#if ENABLE_TOUCH_PIN
-    int touchVal = touchRead(TOUCH_HEAD_PIN);
-    if (touchVal < 38) {
-        if (!isBeingPetted) {
-            isBeingPetted = true;
-            lastInteractionTime = now;
-            if (robotState == STATE_GAME_FLAPPY) {
-                jumpFlappyBird();
-            } else {
-                affectionLevel = min(100, affectionLevel + 8);
-                robotState = STATE_HAPPY_AFFECTION;
-                currentEmotion = EMOTION_KAWAII_CAT;
-                robotSayCat();
-                emotionResetTime = now + 4000;
-            }
-        }
-    } else {
-        isBeingPetted = false;
-    }
-#endif
+    // 3. Capacitive Touch Petting Engine (GPIO 4)
+    checkCapacitivePetting();
 
-    // 4. Serial Keyboard Controls & Games
+    // 4. Living Metabolism & Life Cycle (Energy, Hunger, Affection)
+    updateMetabolismAndLife();
+
+    // 5. Serial Keyboard Controls & Games
     if (Serial.available() > 0) {
         char ch = Serial.read();
         if (ch != '\r' && ch != '\n' && ch != ' ') {
@@ -1950,7 +2077,7 @@ void loop() {
         }
     }
 
-    // 5. Game Modes & Sentry Engine
+    // 6. Game Modes & Sentry Engine
     if (robotState == STATE_GAME_FLAPPY) {
         updateFlappyGame();
         updateServoMotion();
@@ -1975,14 +2102,14 @@ void loop() {
         return;
     }
 
-    // 6. Living Auto-Nap after 90s idle
+    // 7. Living Auto-Nap after 90s idle
     if (robotState == STATE_AWAKE_IDLE && (now - lastInteractionTime > 90000)) {
         robotState = STATE_DEEP_SLEEP;
         currentEmotion = EMOTION_SLEEP;
         robotSaySleep();
     }
 
-    // 7. Spontaneous Daydreams
+    // 8. Spontaneous Biological Quirks & Daydreams
     if (robotState == STATE_AWAKE_IDLE && now >= nextSpontaneousBehavior) {
         nextSpontaneousBehavior = now + random(16000, 30000);
         int act = random(0, 7);
@@ -2002,7 +2129,7 @@ void loop() {
         targetServoAngle = SERVO_CENTER;
     }
 
-    // 8. Biological Gaze & Blinking
+    // 9. Biological Gaze Tracking & Saccades
     if (robotState == STATE_AWAKE_IDLE && currentEmotion == EMOTION_IDLE) {
         if (now >= nextGazeTime) {
             int r = random(0, 5);
@@ -2037,10 +2164,10 @@ void loop() {
         }
     }
 
-    // 9. Periodic Internet Weather Check
+    // 10. Periodic NTP Clock & Weather Check
     updateInternetClockAndWeather();
 
-    // 10. Render Screen
+    // 11. Render Screen
     if (oledReady) {
         float openRatio = isBlinking ? (1.0f - blinkProgress) : 1.0f;
 
@@ -2076,7 +2203,7 @@ void loop() {
         display.display();
     }
 
-    // 11. Update Servo Motion
+    // 12. Update Servo Motion
     updateServoMotion();
 
     delay(20);

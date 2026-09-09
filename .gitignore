@@ -1,0 +1,13 @@
+# Secrets and Private Credentials (NEVER PUSH TO GITHUB)
+secrets.h
+*secrets.h
+config_secrets.h
+*.secret
+*.env
+
+# Build outputs
+*.pyc
+__pycache__/
+.pio/
+.vscode/
+scratch/
