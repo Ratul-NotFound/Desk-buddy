@@ -14,7 +14,7 @@
 #include "voice_samples.h"
 
 // =========================================================================
-// 🤖 ESP32 DESK BUDDY: ULTIMATE INTERACTIVE EMO-STYLE LIVING COMPANION
+// 🤖 ESP32 PIKU: ULTIMATE INTERACTIVE EMO-STYLE LIVING COMPANION
 // =========================================================================
 // Full Master Suite:
 //   • Dual-Mode WiFi: Direct AP Hotspot ("DeskBuddy-WiFi") + Router Client (STA)
@@ -355,7 +355,7 @@ void renderRPS(const char* choice) {
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
     display.setCursor(14, 4);
-    display.print(F("DESK BUDDY CHOSE:"));
+    display.print(F("PIKU CHOSE:"));
 
     if (strcmp(choice, "ROCK") == 0) {
         display.fillCircle(64, 38, 16, SSD1306_WHITE);
@@ -847,7 +847,7 @@ void playRobotVoiceHD(const uint8_t *audioData, int length, int mouthShape, cons
 
 void robotSayHello() {
     targetServoAngle = SERVO_CENTER + 16.0f;
-    playRobotVoiceHD(voice_hello_data, sizeof(voice_hello_data), 2, "\"Hello! I'm Desk Buddy!\"");
+    playRobotVoiceHD(voice_hello_data, sizeof(voice_hello_data), 2, "\"Hello! I'm Piku!\"");
     targetServoAngle = SERVO_CENTER;
 }
 
@@ -1139,7 +1139,7 @@ void askGeminiAI(const String &userPrompt) {
 
         // Prepare System Prompt + User Query Payload
         String payload = "{\"contents\":[{\"parts\":[{\"text\":\""
-                         "You are Desk Buddy, an intelligent, cute, sassy EMO robot companion. "
+                         "You are Piku, an intelligent, cute, sassy EMO robot companion. "
                          "Reply concisely in UNDER 15 WORDS. Always prepend ONE emotion tag: "
                          "[HAPPY], [LOVE], [ANGER], [CURIOUS], [COOL], [SLEEPY], [PARTY], [CAT], [MONEY], [HACKER], [KISS], or [SAD]. "
                          "User says: " + userPrompt + "\"}]}]}";
@@ -1180,7 +1180,7 @@ void askGeminiAI(const String &userPrompt) {
                 String cleanText = (closeBracket != -1) ? aiText.substring(closeBracket + 1) : aiText;
                 cleanText.trim();
 
-                displayScrollingMessage(cleanText, "🤖 DESK BUDDY AI");
+                displayScrollingMessage(cleanText, "🤖 PIKU AI");
             } else {
                 robotSayUhOh();
                 displayScrollingMessage("Could not parse AI reply!", "ERROR");
@@ -1244,7 +1244,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Desk Buddy AI EMO Companion</title>
+<title>PIKU AI EMO Living Companion</title>
 <style>
 :root{--bg:#070b14;--card:rgba(18,24,43,0.75);--primary:#00ffcc;--accent:#ff007f;--yellow:#fbbf24;--text:#f1f5f9;--glow:0 0 16px rgba(0,255,204,0.45)}
 *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
@@ -1289,7 +1289,7 @@ input[type=range]{width:100%;accent-color:var(--primary);height:6px;border-radiu
 <body>
 <div class="container">
 <header>
-<h1>🤖 DESK BUDDY AI</h1>
+<h1>🤖 PIKU AI</h1>
 <div class="pill" id="conn-pill">● DUAL-MODE AP & STA ONLINE</div>
 </header>
 
@@ -1305,11 +1305,11 @@ input[type=range]{width:100%;accent-color:var(--primary);height:6px;border-radiu
 <div class="card">
 <div class="card-title">🧠 Google Gemini Voice & Text Brain</div>
 <div class="chat-box" id="chat-log">
-<div class="msg-bubble msg-ai">🤖 Hello! I am your Desk Buddy AI! Speak or type anything to me!</div>
+<div class="msg-bubble msg-ai">🤖 Hello! I am your Piku AI! Speak or type anything to me!</div>
 </div>
 <div class="input-row">
 <button class="mic-btn" id="mic-btn" onclick="toggleVoiceInput()">🎙️</button>
-<input type="text" id="ai-input" placeholder="Ask Desk Buddy anything..." onkeydown="if(event.key==='Enter')sendAI()">
+<input type="text" id="ai-input" placeholder="Ask Piku anything..." onkeydown="if(event.key==='Enter')sendAI()">
 <button class="send-btn" onclick="sendAI()">Ask</button>
 </div>
 <div class="chips">
@@ -1381,8 +1381,8 @@ input[type=range]{width:100%;accent-color:var(--primary);height:6px;border-radiu
 <!-- TAB 3: WIFI ROUTER PROVISIONING -->
 <div id="tab-wifi" class="tab-content">
 <div class="card">
-<div class="card-title">📡 Connect Desk Buddy to WiFi Router</div>
-<p style="font-size:12px;color:#94a3b8;margin-bottom:10px">Connect to any local 2.4GHz WiFi network to give Desk Buddy full Internet & Gemini AI access anywhere!</p>
+<div class="card-title">📡 Connect Piku to WiFi Router</div>
+<p style="font-size:12px;color:#94a3b8;margin-bottom:10px">Connect to any local 2.4GHz WiFi network to give Piku full Internet & Gemini AI access anywhere!</p>
 <button class="full-submit" style="margin-bottom:12px" onclick="scanWifi()">🔍 Scan Nearby 2.4GHz Networks</button>
 <div style="margin-bottom:8px">
 <label style="font-size:11px;color:#94a3b8">SELECT NETWORK (SSID):</label>
@@ -1502,7 +1502,7 @@ function saveWifi(){
   const p=document.getElementById('wifi-pass').value;
   fetch('/api/wifi/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:s,pass:p})})
   .then(r=>r.text())
-  .then(m=>alert('WiFi saved! Desk Buddy is connecting to '+s));
+  .then(m=>alert('WiFi saved! Piku is connecting to '+s));
 }
 
 function saveGeminiKey(){
@@ -1672,7 +1672,7 @@ void setup() {
 
     Serial.println();
     Serial.println(F("========================================================="));
-    Serial.println(F(" 🤖 ESP32 DESK BUDDY: EMO LIVING AI COMPANION MASTER     "));
+    Serial.println(F(" 🤖 ESP32 PIKU: EMO LIVING AI COMPANION MASTER     "));
     Serial.println(F("========================================================="));
 
     // 1. Audio DAC on GPIO 25
@@ -1705,7 +1705,7 @@ void setup() {
 
         display.setTextSize(2);
         display.setCursor(14, 10);
-        display.println(F("DESK BUDDY"));
+        display.println(F("PIKU"));
         display.setTextSize(1);
         display.setCursor(14, 34);
         display.println(F("STARTING DUAL WIFI..."));

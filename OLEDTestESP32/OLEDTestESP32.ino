@@ -454,7 +454,8 @@ void renderEmoPartyDJ(int step) {
 
     display.drawCircle(EYE_L_CX, EYE_CY - 4, 14, SSD1306_WHITE);
     display.drawCircle(EYE_R_CX, EYE_CY - 4, 14, SSD1306_WHITE);
-    display.drawArc(64, 16, 36, 34, 0, 180, SSD1306_WHITE);
+    display.drawCircleHelper(64, 20, 34, 1 | 2, SSD1306_WHITE);
+    display.drawCircleHelper(64, 20, 35, 1 | 2, SSD1306_WHITE);
 
     display.drawCircle(64, 52, 6, SSD1306_WHITE);
     display.fillRect(56, 46, 16, 6, SSD1306_BLACK);
@@ -532,7 +533,8 @@ void renderGamerPacman(int frame) {
     }
 
     int gx = px - 32;
-    display.fillRoundRect(gx, EYE_CY - 16, 24, 32, 10, SSD1306_WHITE);
+    int gy = EYE_CY - 16;
+    display.fillRoundRect(gx, gy, 24, 32, 10, SSD1306_WHITE);
     int footShift = (frame % 2 == 0) ? 0 : 2;
     display.fillRect(gx + 2 + footShift, gy + 22, 5, 4, SSD1306_BLACK);
     display.fillRect(gx + 11 + footShift, gy + 22, 5, 4, SSD1306_BLACK);

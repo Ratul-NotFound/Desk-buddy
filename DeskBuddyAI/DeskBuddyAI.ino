@@ -533,8 +533,7 @@ void renderGamerPacman(int frame) {
     }
 
     int gx = px - 32;
-    int gy = EYE_CY - 16;
-    display.fillRoundRect(gx, gy, 24, 32, 10, SSD1306_WHITE);
+    display.fillRoundRect(gx, EYE_CY - 16, 24, 32, 10, SSD1306_WHITE);
     int footShift = (frame % 2 == 0) ? 0 : 2;
     display.fillRect(gx + 2 + footShift, gy + 22, 5, 4, SSD1306_BLACK);
     display.fillRect(gx + 11 + footShift, gy + 22, 5, 4, SSD1306_BLACK);
