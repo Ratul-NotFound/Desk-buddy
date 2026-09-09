@@ -40,6 +40,8 @@ bool oledReady = false;
 String staSSID = "";
 String staPass = "";
 String geminiKey = "";
+int masterVolume = 80;       // Master Audio Volume (0 - 100%)
+bool isMuted = false;        // Mute state
 int gmtOffsetHours = 0;
 bool wifiStaConnected = false;
 unsigned long nextWifiCheck = 0;
@@ -156,6 +158,8 @@ unsigned long nextGazeTime = 0;
 // =========================================================================
 // FORWARD DECLARATIONS
 // =========================================================================
+void setVolume(int vol);
+void showVolumeHUD(int vol);
 void playRobotVoiceHD(const uint8_t *audioData, int length, int mouthShape, const char* subtitle);
 void robotSayHello();
 void robotSayLove();
@@ -805,7 +809,52 @@ void displayScrollingMessage(const String &text, const char* title) {
 // 🔊 16kHz HD AUDIO ENGINE
 // =========================================================================
 
+void setVolume(int vol) {
+    masterVolume = constrain(vol, 0, 100);
+    isMuted = (masterVolume == 0);
+    prefs.begin(NVS_NAMESPACE, false);
+    prefs.putInt("volume", masterVolume);
+    prefs.end();
+    Serial.print(F("[Audio] Master Volume set to: "));
+    Serial.print(masterVolume);
+    Serial.println(F("%"));
+}
+
+void showVolumeHUD(int vol) {
+    if (!oledReady) return;
+    display.clearDisplay();
+    display.fillRoundRect(EYE_L_CX - 12, 4, 24, 18, 4, SSD1306_WHITE);
+    display.fillRoundRect(EYE_R_CX - 12, 4, 24, 18, 4, SSD1306_WHITE);
+    display.fillCircle(EYE_L_CX, 12, 3, SSD1306_BLACK);
+    display.fillCircle(EYE_R_CX, 12, 3, SSD1306_BLACK);
+
+    display.drawRoundRect(14, 30, 100, 18, 4, SSD1306_WHITE);
+    int fillW = (vol * 96) / 100;
+    if (fillW > 0) display.fillRect(16, 32, fillW, 14, SSD1306_WHITE);
+
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(30, 52);
+    if (vol == 0 || isMuted) {
+        display.print(F("MUTED [ X ]"));
+    } else {
+        display.print(F("VOLUME: "));
+        display.print(vol);
+        display.print(F("%"));
+    }
+    display.display();
+}
+
 void playRobotVoiceHD(const uint8_t *audioData, int length, int mouthShape, const char* subtitle) {
+    if (isMuted || masterVolume <= 0) {
+        if (subtitle != NULL) {
+            drawSpeechScreen(mouthShape, subtitle);
+            delay(1000);
+            drawSpeechScreen(4, subtitle);
+        }
+        return;
+    }
+
     micMuteUntil = millis() + (length / (VOICE_SAMPLE_RATE / 1000)) + 300; // Mute mic during speech
 
     if (subtitle != NULL) {
@@ -815,11 +864,15 @@ void playRobotVoiceHD(const uint8_t *audioData, int length, int mouthShape, cons
     int delayMicros = 1000000 / VOICE_SAMPLE_RATE;
     unsigned long nextSampleTime = micros();
 
+    // Scale amplitude dynamically based on masterVolume (0 to 100)
+    int dynamicGain = (70 * masterVolume) / 100;
+    if (dynamicGain < 4) dynamicGain = 4;
+
     for (int i = 0; i < length; i++) {
         uint8_t raw = pgm_read_byte(&audioData[i]);
 
         int centered = (int)raw - 128;
-        int scaled = 45 + ((centered * 70) / 128);
+        int scaled = 45 + ((centered * dynamicGain) / 128);
         if (scaled < 0) scaled = 0;
         if (scaled > 90) scaled = 90;
 
@@ -1371,6 +1424,19 @@ input[type=range]{width:100%;accent-color:var(--primary);height:6px;border-radiu
 </div>
 
 <div class="card">
+<div class="card-title">🔊 Master Volume Control (<span id="vol-txt">80%</span>)</div>
+<div class="slider-container">
+<input type="range" id="vol-slider" min="0" max="100" value="80" oninput="setVol(this.value)">
+</div>
+<div class="btn-grid" style="margin-top:8px">
+<button class="action-btn" onclick="setVol(0)">🔇 Mute</button>
+<button class="action-btn" onclick="setVol(40)">🔉 40%</button>
+<button class="action-btn" onclick="setVol(80)">🔊 80%</button>
+<button class="action-btn" onclick="setVol(100)">📢 100%</button>
+</div>
+</div>
+
+<div class="card">
 <div class="card-title">🦾 Physical Head Steering</div>
 <div class="slider-container">
 <input type="range" min="40" max="140" value="90" oninput="steer(this.value)">
@@ -1424,6 +1490,11 @@ function switchTab(tabId){
 }
 function cmd(action){fetch('/api?cmd='+action);}
 function steer(angle){fetch('/api?steer='+angle);}
+function setVol(v){
+  document.getElementById('vol-slider').value=v;
+  document.getElementById('vol-txt').textContent=v+'%';
+  fetch('/api?vol='+v);
+}
 
 function sendAI(){
   const inp=document.getElementById('ai-input');
@@ -1533,6 +1604,21 @@ void handleRoot() {
 void handleCommand() {
     lastInteractionTime = millis();
     affectionLevel = min(100, affectionLevel + 3);
+
+    if (server.hasArg("vol")) {
+        int v = server.arg("vol").toInt();
+        setVolume(v);
+        showVolumeHUD(masterVolume);
+        server.send(200, "text/plain", String(masterVolume));
+        return;
+    }
+
+    if (server.hasArg("mute")) {
+        isMuted = !isMuted;
+        showVolumeHUD(isMuted ? 0 : masterVolume);
+        server.send(200, "text/plain", isMuted ? "MUTED" : "UNMUTED");
+        return;
+    }
 
     if (server.hasArg("steer")) {
         int a = server.arg("steer").toInt();
@@ -1721,6 +1807,8 @@ void setup() {
     staPass = prefs.getString("sta_pass", "");
     geminiKey = prefs.getString("gemini_key", "");
     gmtOffsetHours = prefs.getInt("gmt_offset", 0);
+    masterVolume = prefs.getInt("volume", 80);
+    isMuted = (masterVolume == 0);
     prefs.end();
 
     // 6. Start Simultaneous Dual-Mode WiFi (AP + STA)
@@ -1839,6 +1927,19 @@ void loop() {
                         emotionResetTime = now + 4500;
                         break;
                     }
+                    case '+': case ']': case '=':
+                        setVolume(min(100, masterVolume + 10));
+                        showVolumeHUD(masterVolume);
+                        robotSayTada();
+                        break;
+                    case '-': case '[': case '_':
+                        setVolume(max(0, masterVolume - 10));
+                        showVolumeHUD(masterVolume);
+                        break;
+                    case '0':
+                        isMuted = !isMuted;
+                        showVolumeHUD(isMuted ? 0 : masterVolume);
+                        break;
                     case 'i': case 'I':
                         robotState = STATE_AWAKE_IDLE;
                         currentEmotion = EMOTION_IDLE;

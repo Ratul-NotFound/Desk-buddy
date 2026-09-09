@@ -14,7 +14,7 @@
 #include "voice_samples.h"
 
 // =========================================================================
-// 🤖 ESP32 DESK BUDDY: ULTIMATE INTERACTIVE EMO-STYLE LIVING COMPANION
+// 🤖 ESP32 PIKU: ULTIMATE INTERACTIVE EMO-STYLE LIVING COMPANION
 // =========================================================================
 // Full Master Suite:
 //   • Dual-Mode WiFi: Direct AP Hotspot ("DeskBuddy-WiFi") + Router Client (STA)
@@ -40,6 +40,8 @@ bool oledReady = false;
 String staSSID = "";
 String staPass = "";
 String geminiKey = "";
+int masterVolume = 80;       // Master Audio Volume (0 - 100%)
+bool isMuted = false;        // Mute state
 int gmtOffsetHours = 0;
 bool wifiStaConnected = false;
 unsigned long nextWifiCheck = 0;
@@ -156,6 +158,8 @@ unsigned long nextGazeTime = 0;
 // =========================================================================
 // FORWARD DECLARATIONS
 // =========================================================================
+void setVolume(int vol);
+void showVolumeHUD(int vol);
 void playRobotVoiceHD(const uint8_t *audioData, int length, int mouthShape, const char* subtitle);
 void robotSayHello();
 void robotSayLove();
@@ -355,7 +359,7 @@ void renderRPS(const char* choice) {
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
     display.setCursor(14, 4);
-    display.print(F("DESK BUDDY CHOSE:"));
+    display.print(F("PIKU CHOSE:"));
 
     if (strcmp(choice, "ROCK") == 0) {
         display.fillCircle(64, 38, 16, SSD1306_WHITE);
@@ -805,7 +809,52 @@ void displayScrollingMessage(const String &text, const char* title) {
 // 🔊 16kHz HD AUDIO ENGINE
 // =========================================================================
 
+void setVolume(int vol) {
+    masterVolume = constrain(vol, 0, 100);
+    isMuted = (masterVolume == 0);
+    prefs.begin(NVS_NAMESPACE, false);
+    prefs.putInt("volume", masterVolume);
+    prefs.end();
+    Serial.print(F("[Audio] Master Volume set to: "));
+    Serial.print(masterVolume);
+    Serial.println(F("%"));
+}
+
+void showVolumeHUD(int vol) {
+    if (!oledReady) return;
+    display.clearDisplay();
+    display.fillRoundRect(EYE_L_CX - 12, 4, 24, 18, 4, SSD1306_WHITE);
+    display.fillRoundRect(EYE_R_CX - 12, 4, 24, 18, 4, SSD1306_WHITE);
+    display.fillCircle(EYE_L_CX, 12, 3, SSD1306_BLACK);
+    display.fillCircle(EYE_R_CX, 12, 3, SSD1306_BLACK);
+
+    display.drawRoundRect(14, 30, 100, 18, 4, SSD1306_WHITE);
+    int fillW = (vol * 96) / 100;
+    if (fillW > 0) display.fillRect(16, 32, fillW, 14, SSD1306_WHITE);
+
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(30, 52);
+    if (vol == 0 || isMuted) {
+        display.print(F("MUTED [ X ]"));
+    } else {
+        display.print(F("VOLUME: "));
+        display.print(vol);
+        display.print(F("%"));
+    }
+    display.display();
+}
+
 void playRobotVoiceHD(const uint8_t *audioData, int length, int mouthShape, const char* subtitle) {
+    if (isMuted || masterVolume <= 0) {
+        if (subtitle != NULL) {
+            drawSpeechScreen(mouthShape, subtitle);
+            delay(1000);
+            drawSpeechScreen(4, subtitle);
+        }
+        return;
+    }
+
     micMuteUntil = millis() + (length / (VOICE_SAMPLE_RATE / 1000)) + 300; // Mute mic during speech
 
     if (subtitle != NULL) {
@@ -815,11 +864,15 @@ void playRobotVoiceHD(const uint8_t *audioData, int length, int mouthShape, cons
     int delayMicros = 1000000 / VOICE_SAMPLE_RATE;
     unsigned long nextSampleTime = micros();
 
+    // Scale amplitude dynamically based on masterVolume (0 to 100)
+    int dynamicGain = (70 * masterVolume) / 100;
+    if (dynamicGain < 4) dynamicGain = 4;
+
     for (int i = 0; i < length; i++) {
         uint8_t raw = pgm_read_byte(&audioData[i]);
 
         int centered = (int)raw - 128;
-        int scaled = 45 + ((centered * 70) / 128);
+        int scaled = 45 + ((centered * dynamicGain) / 128);
         if (scaled < 0) scaled = 0;
         if (scaled > 90) scaled = 90;
 
@@ -847,7 +900,7 @@ void playRobotVoiceHD(const uint8_t *audioData, int length, int mouthShape, cons
 
 void robotSayHello() {
     targetServoAngle = SERVO_CENTER + 16.0f;
-    playRobotVoiceHD(voice_hello_data, sizeof(voice_hello_data), 2, "\"Hello! I'm Desk Buddy!\"");
+    playRobotVoiceHD(voice_hello_data, sizeof(voice_hello_data), 2, "\"Hello! I'm Piku!\"");
     targetServoAngle = SERVO_CENTER;
 }
 
@@ -1139,7 +1192,7 @@ void askGeminiAI(const String &userPrompt) {
 
         // Prepare System Prompt + User Query Payload
         String payload = "{\"contents\":[{\"parts\":[{\"text\":\""
-                         "You are Desk Buddy, an intelligent, cute, sassy EMO robot companion. "
+                         "You are Piku, an intelligent, cute, sassy EMO robot companion. "
                          "Reply concisely in UNDER 15 WORDS. Always prepend ONE emotion tag: "
                          "[HAPPY], [LOVE], [ANGER], [CURIOUS], [COOL], [SLEEPY], [PARTY], [CAT], [MONEY], [HACKER], [KISS], or [SAD]. "
                          "User says: " + userPrompt + "\"}]}]}";
@@ -1180,7 +1233,7 @@ void askGeminiAI(const String &userPrompt) {
                 String cleanText = (closeBracket != -1) ? aiText.substring(closeBracket + 1) : aiText;
                 cleanText.trim();
 
-                displayScrollingMessage(cleanText, "🤖 DESK BUDDY AI");
+                displayScrollingMessage(cleanText, "🤖 PIKU AI");
             } else {
                 robotSayUhOh();
                 displayScrollingMessage("Could not parse AI reply!", "ERROR");
@@ -1244,7 +1297,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Desk Buddy AI EMO Companion</title>
+<title>PIKU AI EMO Living Companion</title>
 <style>
 :root{--bg:#070b14;--card:rgba(18,24,43,0.75);--primary:#00ffcc;--accent:#ff007f;--yellow:#fbbf24;--text:#f1f5f9;--glow:0 0 16px rgba(0,255,204,0.45)}
 *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
@@ -1289,7 +1342,7 @@ input[type=range]{width:100%;accent-color:var(--primary);height:6px;border-radiu
 <body>
 <div class="container">
 <header>
-<h1>🤖 DESK BUDDY AI</h1>
+<h1>🤖 PIKU AI</h1>
 <div class="pill" id="conn-pill">● DUAL-MODE AP & STA ONLINE</div>
 </header>
 
@@ -1305,11 +1358,11 @@ input[type=range]{width:100%;accent-color:var(--primary);height:6px;border-radiu
 <div class="card">
 <div class="card-title">🧠 Google Gemini Voice & Text Brain</div>
 <div class="chat-box" id="chat-log">
-<div class="msg-bubble msg-ai">🤖 Hello! I am your Desk Buddy AI! Speak or type anything to me!</div>
+<div class="msg-bubble msg-ai">🤖 Hello! I am your Piku AI! Speak or type anything to me!</div>
 </div>
 <div class="input-row">
 <button class="mic-btn" id="mic-btn" onclick="toggleVoiceInput()">🎙️</button>
-<input type="text" id="ai-input" placeholder="Ask Desk Buddy anything..." onkeydown="if(event.key==='Enter')sendAI()">
+<input type="text" id="ai-input" placeholder="Ask Piku anything..." onkeydown="if(event.key==='Enter')sendAI()">
 <button class="send-btn" onclick="sendAI()">Ask</button>
 </div>
 <div class="chips">
@@ -1371,6 +1424,19 @@ input[type=range]{width:100%;accent-color:var(--primary);height:6px;border-radiu
 </div>
 
 <div class="card">
+<div class="card-title">🔊 Master Volume Control (<span id="vol-txt">80%</span>)</div>
+<div class="slider-container">
+<input type="range" id="vol-slider" min="0" max="100" value="80" oninput="setVol(this.value)">
+</div>
+<div class="btn-grid" style="margin-top:8px">
+<button class="action-btn" onclick="setVol(0)">🔇 Mute</button>
+<button class="action-btn" onclick="setVol(40)">🔉 40%</button>
+<button class="action-btn" onclick="setVol(80)">🔊 80%</button>
+<button class="action-btn" onclick="setVol(100)">📢 100%</button>
+</div>
+</div>
+
+<div class="card">
 <div class="card-title">🦾 Physical Head Steering</div>
 <div class="slider-container">
 <input type="range" min="40" max="140" value="90" oninput="steer(this.value)">
@@ -1381,8 +1447,8 @@ input[type=range]{width:100%;accent-color:var(--primary);height:6px;border-radiu
 <!-- TAB 3: WIFI ROUTER PROVISIONING -->
 <div id="tab-wifi" class="tab-content">
 <div class="card">
-<div class="card-title">📡 Connect Desk Buddy to WiFi Router</div>
-<p style="font-size:12px;color:#94a3b8;margin-bottom:10px">Connect to any local 2.4GHz WiFi network to give Desk Buddy full Internet & Gemini AI access anywhere!</p>
+<div class="card-title">📡 Connect Piku to WiFi Router</div>
+<p style="font-size:12px;color:#94a3b8;margin-bottom:10px">Connect to any local 2.4GHz WiFi network to give Piku full Internet & Gemini AI access anywhere!</p>
 <button class="full-submit" style="margin-bottom:12px" onclick="scanWifi()">🔍 Scan Nearby 2.4GHz Networks</button>
 <div style="margin-bottom:8px">
 <label style="font-size:11px;color:#94a3b8">SELECT NETWORK (SSID):</label>
@@ -1424,6 +1490,11 @@ function switchTab(tabId){
 }
 function cmd(action){fetch('/api?cmd='+action);}
 function steer(angle){fetch('/api?steer='+angle);}
+function setVol(v){
+  document.getElementById('vol-slider').value=v;
+  document.getElementById('vol-txt').textContent=v+'%';
+  fetch('/api?vol='+v);
+}
 
 function sendAI(){
   const inp=document.getElementById('ai-input');
@@ -1502,7 +1573,7 @@ function saveWifi(){
   const p=document.getElementById('wifi-pass').value;
   fetch('/api/wifi/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:s,pass:p})})
   .then(r=>r.text())
-  .then(m=>alert('WiFi saved! Desk Buddy is connecting to '+s));
+  .then(m=>alert('WiFi saved! Piku is connecting to '+s));
 }
 
 function saveGeminiKey(){
@@ -1533,6 +1604,21 @@ void handleRoot() {
 void handleCommand() {
     lastInteractionTime = millis();
     affectionLevel = min(100, affectionLevel + 3);
+
+    if (server.hasArg("vol")) {
+        int v = server.arg("vol").toInt();
+        setVolume(v);
+        showVolumeHUD(masterVolume);
+        server.send(200, "text/plain", String(masterVolume));
+        return;
+    }
+
+    if (server.hasArg("mute")) {
+        isMuted = !isMuted;
+        showVolumeHUD(isMuted ? 0 : masterVolume);
+        server.send(200, "text/plain", isMuted ? "MUTED" : "UNMUTED");
+        return;
+    }
 
     if (server.hasArg("steer")) {
         int a = server.arg("steer").toInt();
@@ -1672,7 +1758,7 @@ void setup() {
 
     Serial.println();
     Serial.println(F("========================================================="));
-    Serial.println(F(" 🤖 ESP32 DESK BUDDY: EMO LIVING AI COMPANION MASTER     "));
+    Serial.println(F(" 🤖 ESP32 PIKU: EMO LIVING AI COMPANION MASTER     "));
     Serial.println(F("========================================================="));
 
     // 1. Audio DAC on GPIO 25
@@ -1705,7 +1791,7 @@ void setup() {
 
         display.setTextSize(2);
         display.setCursor(14, 10);
-        display.println(F("DESK BUDDY"));
+        display.println(F("PIKU"));
         display.setTextSize(1);
         display.setCursor(14, 34);
         display.println(F("STARTING DUAL WIFI..."));
@@ -1721,6 +1807,8 @@ void setup() {
     staPass = prefs.getString("sta_pass", "");
     geminiKey = prefs.getString("gemini_key", "");
     gmtOffsetHours = prefs.getInt("gmt_offset", 0);
+    masterVolume = prefs.getInt("volume", 80);
+    isMuted = (masterVolume == 0);
     prefs.end();
 
     // 6. Start Simultaneous Dual-Mode WiFi (AP + STA)
@@ -1839,6 +1927,19 @@ void loop() {
                         emotionResetTime = now + 4500;
                         break;
                     }
+                    case '+': case ']': case '=':
+                        setVolume(min(100, masterVolume + 10));
+                        showVolumeHUD(masterVolume);
+                        robotSayTada();
+                        break;
+                    case '-': case '[': case '_':
+                        setVolume(max(0, masterVolume - 10));
+                        showVolumeHUD(masterVolume);
+                        break;
+                    case '0':
+                        isMuted = !isMuted;
+                        showVolumeHUD(isMuted ? 0 : masterVolume);
+                        break;
                     case 'i': case 'I':
                         robotState = STATE_AWAKE_IDLE;
                         currentEmotion = EMOTION_IDLE;

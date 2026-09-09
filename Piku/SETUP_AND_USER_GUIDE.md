@@ -68,7 +68,16 @@ PIKU runs in **Simultaneous Dual-Mode WiFi (`WIFI_AP_STA`)**:
 - **Rock Paper Scissors:** Press `r` in Serial Monitor or tap *RPS* in Web UI. PIKU counts down *"1, 2, 3... SHOOT!"* and shows its pick!
 - **Magic 8-Ball:** Press `8` in Serial Monitor to get fortune answers.
 
-### 4. 🎭 Serial Keyboard Controls (115200 Baud)
+### 4. 🔊 Master Volume Controls
+- **In Web Dashboard:** Slide the **Volume Slider (0% - 100%)** or tap quick presets: **🔇 Mute**, **🔉 40%**, **🔊 80%**, or **📢 100%**.
+- **Keyboard Shortcuts (Serial Monitor):**
+  - `+` or `]` ➔ Volume Up (+10%) & Ta-Daaa test chirp
+  - `-` or `[` ➔ Volume Down (-10%)
+  - `0` ➔ Toggle Mute / Unmute
+- **On-Screen Volume HUD:** Adjusting volume shows a live animated volume level bar on the OLED display!
+- **Persistent Memory:** PIKU automatically saves your preferred volume level to Flash memory so it stays saved across power cycles!
+
+### 5. 🎭 Serial Keyboard Controls (115200 Baud)
 - `1` / `h` ➔ Hello Greeting
 - `2` / `l` ➔ Love Heart Eyes (`"I Love You!"`)
 - `3` / `t` ➔ Ta-Daaa Celebration
@@ -86,4 +95,7 @@ PIKU runs in **Simultaneous Dual-Mode WiFi (`WIFI_AP_STA`)**:
 - `e` ➔ Feed Pizza Snack
 - `a` ➔ Desk Sentry Alarm Mode
 - `o` ➔ 25-min Study Timer
+- `+` / `]` ➔ Volume Up (+10%)
+- `-` / `[` ➔ Volume Down (-10%)
+- `0` ➔ Toggle Mute
 - `i` ➔ Reset to Normal Biological Idle
