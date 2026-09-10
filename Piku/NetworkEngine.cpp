@@ -35,22 +35,37 @@ void NetworkEngine::fetchWeather(float lat, float lon, int* outTemp, int* outHum
                  "&longitude=" + String(lon, 4) +
                  "&current_weather=true&hourly=relativehumidity_2m&forecast_days=1&timezone=auto";
     http.begin(url);
-    if (http.GET() == 200) {
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+    http.setUserAgent("PikuDeskBuddy/2.0");
+    http.setTimeout(5000);
+    int code = http.GET();
+    if (code == 200) {
         String body = http.getString();
         int ti = body.indexOf("\"temperature\":");
-        if (ti != -1) *outTemp = (int)body.substring(ti + 14, body.indexOf(',', ti)).toFloat();
+        if (ti != -1) {
+            int end = body.indexOf(',', ti);
+            if (end == -1) end = body.indexOf('}', ti);
+            if (end != -1) *outTemp = (int)body.substring(ti + 14, end).toFloat();
+        }
         int wi = body.indexOf("\"weathercode\":");
-        int code = (wi != -1) ? body.substring(wi + 14, body.indexOf(',', wi)).toInt() : 0;
-        if      (code == 0)          *outCondition = "Sunny";
-        else if (code <= 3)          *outCondition = "Partly Cloudy";
-        else if (code <= 48)         *outCondition = "Foggy";
-        else if (code <= 67)         *outCondition = "Rainy";
-        else if (code <= 77)         *outCondition = "Snowy";
-        else                         *outCondition = "Stormy";
+        int wcode = 0;
+        if (wi != -1) {
+            int end = body.indexOf(',', wi);
+            if (end == -1) end = body.indexOf('}', wi);
+            if (end != -1) wcode = body.substring(wi + 14, end).toInt();
+        }
+        if      (wcode == 0)          *outCondition = "Sunny";
+        else if (wcode <= 3)          *outCondition = "Partly Cloudy";
+        else if (wcode <= 48)         *outCondition = "Foggy";
+        else if (wcode <= 67)         *outCondition = "Rainy";
+        else if (wcode <= 77)         *outCondition = "Snowy";
+        else                          *outCondition = "Stormy";
         int hi = body.indexOf("\"relativehumidity_2m\":[");
         if (hi != -1) {
             int start = hi + 23;
-            *outHumidity = body.substring(start, body.indexOf(',', start)).toInt();
+            int end = body.indexOf(',', start);
+            if (end == -1) end = body.indexOf(']', start);
+            if (end != -1) *outHumidity = body.substring(start, end).toInt();
         }
         weatherIsSynced = true;
         Serial.printf("[Weather] %d°C %s\n", *outTemp, outCondition->c_str());

@@ -105,14 +105,16 @@ void DisplayEngine::update(AudioEngine* audio) {
     }
     _current = _lerpShape(_from, _to, t);
 
-    // Advance blink
+    // Advance blink (suppress during sleep)
     float openRatio = 1.0f;
-    if (_blinking) {
-        _blinkProg += 0.25f;
-        if (_blinkProg >= 1.0f) { _blinking = false; _blinkProg = 0; _nextBlink = now + random(3000, 8000); }
-        openRatio = 1.0f - sinf(_blinkProg * M_PI);
-    } else if (now >= _nextBlink) {
-        triggerBlink();
+    if (_currentEmotion != EMOTION_SLEEP) {
+        if (_blinking) {
+            _blinkProg += 0.25f;
+            if (_blinkProg >= 1.0f) { _blinking = false; _blinkProg = 0; _nextBlink = now + random(3000, 8000); }
+            openRatio = 1.0f - sinf(_blinkProg * M_PI);
+        } else if (now >= _nextBlink) {
+            triggerBlink();
+        }
     }
 
     if (_scrolling) { _updateScroll(); return; }
@@ -162,7 +164,7 @@ void DisplayEngine::_renderIdle(float gx, float gy, float openRatio) {
     _disp.fillRoundRect(lx - (int)(s.wL/2), cy - (int)(hL/2), (int)s.wL, (int)hL, (int)s.rL, SSD1306_WHITE);
     _disp.fillRoundRect(rx - (int)(s.wR/2), cy - (int)(hR/2), (int)s.wR, (int)hR, (int)s.rR, SSD1306_WHITE);
 
-    if (openRatio > 0.45f && s.pupilSize > 0) {
+    if (openRatio > 0.45f && s.pupilSize > 0 && _currentEmotion != EMOTION_SLEEP) {
         int px = (int)(gx * 0.45f);
         int py = (int)(gy * 0.45f);
         int pr = (int)s.pupilSize;
@@ -386,13 +388,13 @@ void DisplayEngine::_renderSpecial() {
             break;
         }
         case EMOTION_MAGIC_8BALL:
-            renderMagic8Ball("YES!");
+            renderMagic8Ball(_magic8Answer.c_str());
             break;
         case EMOTION_SNACK_EAT:
             renderSnackEat(f / 4);
             break;
         case EMOTION_RPS_SHOW:
-            renderRPS("ROCK");
+            renderRPS(_rpsChoice.c_str());
             break;
         default:
             _renderIdle(_gazeX, _gazeY, 1.0f);

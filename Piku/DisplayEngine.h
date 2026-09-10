@@ -37,6 +37,8 @@ public:
     bool isScrolling() const { return _scrolling; }
 
     void setClockWeather(const String& timeStr, const String& dateStr, int tempC, int hum, const String& cond);
+    void setRPSChoice(const String& choice)     { _rpsChoice = choice; }
+    void setMagic8Answer(const String& answer)   { _magic8Answer = answer; }
 
     // For mini-games / special screens — called directly
     void renderFlappyGame(int birdY, float vel, int score, int hi, int pipeX, int pipeGapY, bool over);
@@ -83,6 +85,10 @@ private:
     int    _tempC       = 25;
     int    _humidity    = 65;
     String _weatherCond = "Sunny";
+
+    // Dynamic mini-game states
+    String _rpsChoice    = "ROCK";
+    String _magic8Answer = "YES!";
 
     void   _drawEyes(const EyeShape& s, float gx, float gy, float openRatio);
     void   _drawOverlay(RobotEmotion e);

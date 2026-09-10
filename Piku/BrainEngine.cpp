@@ -164,6 +164,8 @@ String BrainEngine::askGemini(const String& userPrompt) {
     String payload = "{\"contents\":[{\"parts\":[{\"text\":\"" + prompt + "\"}]}]}";
 
     const char* endpoints[] = {
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=",
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=",
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=",
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key="
     };
@@ -174,7 +176,7 @@ String BrainEngine::askGemini(const String& userPrompt) {
 
     while (attempts < totalKeys && aiText.length() == 0) {
         String key = _keyPool[_activeKey];
-        for (int m = 0; m < 2 && aiText.length() == 0; m++) {
+        for (int m = 0; m < 4 && aiText.length() == 0; m++) {
             WiFiClientSecure client;
             client.setInsecure();
             client.setTimeout(8000);

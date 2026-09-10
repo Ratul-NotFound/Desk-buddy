@@ -10,6 +10,7 @@ public:
     void update();
     void setSoundEnabled(bool en) { _soundEnabled = en; }
     bool getSoundEnabled()  const { return _soundEnabled; }
+    void onTouchDown(Callback cb)      { _cbTouchDown = cb; }
     void onTouchShort(Callback cb)     { _cbTouchShort = cb; }
     void onTouchSustained(Callback cb) { _cbTouchSustained = cb; }
     void onTouchOverpet(Callback cb)   { _cbTouchOverpet = cb; }
@@ -24,6 +25,7 @@ private:
     unsigned long _petStart         = 0;
     unsigned long _lastPetTick      = 0;
     int           _touchDebounce    = 0;
+    Callback      _cbTouchDown      = nullptr;
     Callback      _cbTouchShort     = nullptr;
     Callback      _cbTouchSustained = nullptr;
     Callback      _cbTouchOverpet   = nullptr;

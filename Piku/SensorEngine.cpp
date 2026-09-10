@@ -23,6 +23,7 @@ void SensorEngine::_updateTouch() {
                 _petting   = true;
                 _petStart  = now;
                 _lastPetTick = now;
+                if (_cbTouchDown) _cbTouchDown();
             }
             unsigned long dur = now - _petStart;
             if (dur > 5500) {

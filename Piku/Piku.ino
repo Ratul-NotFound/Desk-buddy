@@ -227,12 +227,14 @@ void handleCommand() {
         else if (c=="rps") {
             const char* choices[]={"ROCK","PAPER","SCISSORS"};
             rpsChoice=choices[random(0,3)];
+            disp.setRPSChoice(rpsChoice);
             soul.triggerEmotion(EMOTION_RPS_SHOW,70,4000);
             audio.playHD(voice_rps_data,sizeof(voice_rps_data),3,"1,2,3 SHOOT!");
         }
         else if (c=="8ball") {
             const char* answers[]={"YES!","NO WAY!","MAYBE!","TRY AGAIN","ABSOLUTELY"};
             magic8Ans=answers[random(0,5)];
+            disp.setMagic8Answer(magic8Ans);
             soul.triggerEmotion(EMOTION_MAGIC_8BALL,60,4500);
             audio.playChirp(500,1500,200);
         }
@@ -329,9 +331,21 @@ void handleSettingsSave() {
     int ti = body.indexOf("\"tz\":");
     int lai = body.indexOf("\"lat\":");
     int loi = body.indexOf("\"lon\":");
-    if (ti != -1)  gmtOffsetHours = (int)body.substring(ti+5, body.indexOf(',', ti)).toFloat();
-    if (lai != -1) userLat = body.substring(lai+6, body.indexOf(',', lai)).toFloat();
-    if (loi != -1) userLon = body.substring(loi+6, body.indexOf(',', loi)).toFloat();
+    if (ti != -1) {
+        int end = body.indexOf(',', ti);
+        if (end == -1) end = body.indexOf('}', ti);
+        if (end != -1) gmtOffsetHours = (int)body.substring(ti+5, end).toFloat();
+    }
+    if (lai != -1) {
+        int end = body.indexOf(',', lai);
+        if (end == -1) end = body.indexOf('}', lai);
+        if (end != -1) userLat = body.substring(lai+6, end).toFloat();
+    }
+    if (loi != -1) {
+        int end = body.indexOf(',', loi);
+        if (end == -1) end = body.indexOf('}', loi);
+        if (end != -1) userLon = body.substring(loi+6, end).toFloat();
+    }
     Preferences p; p.begin("piku",false);
     p.putInt("gmt_offset",(int)gmtOffsetHours);
     p.putFloat("user_lat",userLat);
@@ -411,11 +425,14 @@ void setup() {
     sensors.setSoundEnabled(soundEnabled);
 
     // 3. Wire sensor callbacks to SoulEngine
-    sensors.onTouchShort([]() {
+    sensors.onTouchDown([]() {
         if (soul.getState() == STATE_GAME_FLAPPY) {
             if (flappyOver) { flappyBirdY = 28; flappyVel = 0; flappyScore = 0; flappyPipeX = 120; flappyOver = false; }
             else flappyVel = -8.0f;
-        } else {
+        }
+    });
+    sensors.onTouchShort([]() {
+        if (soul.getState() != STATE_GAME_FLAPPY) {
             soul.onTouchShort();
         }
     });
