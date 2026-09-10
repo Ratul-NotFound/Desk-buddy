@@ -35,19 +35,36 @@ public:
     void startScrollMessage(const String& text, const char* title = nullptr);
     void showVolumeHUD(int vol, bool muted);
     bool isScrolling() const { return _scrolling; }
+    RobotEmotion getCurrentEmotion() const { return _currentEmotion; }
 
     void setClockWeather(const String& timeStr, const String& dateStr, int tempC, int hum, const String& cond);
     void setRPSChoice(const String& choice)     { _rpsChoice = choice; }
     void setMagic8Answer(const String& answer)   { _magic8Answer = answer; }
 
-    // For mini-games / special screens — called directly
+    // Dedicated Master Screen & Emotion Artworks
+    void renderLivingIdleFace(float gazeX, float gazeY, float openRatio);
     void renderFlappyGame(int birdY, float vel, int score, int hi, int pipeX, int pipeGapY, bool over);
     void renderRPS(const char* choice);
     void renderSentryAlert(int tick);
-    void renderSnackEat(int frame);
+    void renderSnackEat(int chewFrame);
+    void renderEmoCoolSunglasses(int glintOffset);
+    void renderEmoPartyDJ(int step);
+    void renderWalleLoveFace(int pulse);
+    void renderCyberHUD(int scanY);
+    void renderSleepMode(int zStep);
+    void renderGamerPacman(int frame);
+    void renderKawaiiCat(int earTwitch);
+    void renderFocusStudy(int tick);
+    void renderRainySad(int dropStep);
+    void renderFireRage(int flameStep);
+    void renderHypnoDizzy(int rot);
+    void renderJackpotMoney(int coinStep);
+    void renderMatrixHacker(int frame);
+    void renderKawaiiKiss(int heartFlight);
     void renderMagic8Ball(const char* answer);
     void renderClockScreen(const char* timeStr, const char* dateStr);
     void renderWeatherScreen(int tempC, int humidity, const char* condition);
+    void renderSpeechFace(int mouthShape, const char* subtitle);
 
 private:
     Adafruit_SSD1306 _disp;
@@ -76,9 +93,6 @@ private:
 
     RobotEmotion _currentEmotion = EMOTION_IDLE;
 
-    // Overlay & animation tick counter
-    unsigned long _overlayFrame = 0;
-
     // Live clock and weather data for overlays
     String _timeStr     = "--:--";
     String _dateStr     = "---";
@@ -90,14 +104,9 @@ private:
     String _rpsChoice    = "ROCK";
     String _magic8Answer = "YES!";
 
-    void   _drawEyes(const EyeShape& s, float gx, float gy, float openRatio);
-    void   _drawOverlay(RobotEmotion e);
     void   _drawMouth(int shape);
     void   _drawHeart(int cx, int cy, int size);
     EyeShape _targetShapeFor(RobotEmotion e);
-    void   _renderSpeechFace(int mouthShape, const char* subtitle);
-    void   _renderIdle(float gx, float gy, float openRatio);
-    void   _renderSpecial();
     void   _updateScroll();
     float  _lerp(float a, float b, float t) { return a + (b - a) * t; }
     EyeShape _lerpShape(const EyeShape& a, const EyeShape& b, float t);

@@ -1,5 +1,6 @@
 #include "BrainEngine.h"
 #include "secrets.h"
+#include "voice_samples.h"
 
 void BrainEngine::init(SoulEngine* soul, AudioEngine* audio) {
     _soul  = soul;
@@ -128,7 +129,6 @@ String BrainEngine::_extractJsonString(const String& json, const String& key) {
     if (idx == -1) { search = "\"" + key + "\":\""; idx = json.indexOf(search); }
     if (idx == -1) return "";
     int start = idx + search.length();
-    // Find end — skip escaped quotes
     int end = start;
     while (end < (int)json.length()) {
         if (json[end] == '\\') { end += 2; continue; }
@@ -191,7 +191,6 @@ String BrainEngine::askGemini(const String& userPrompt) {
                     if (ti == -1) ti = resp.indexOf("\"text\":\"");
                     if (ti != -1) {
                         String sub = resp.substring(ti + 9);
-                        // Scan for unescaped closing quote
                         int end = 0;
                         while (end < (int)sub.length()) {
                             if (sub[end] == '\\') { end += 2; continue; }
@@ -261,14 +260,12 @@ void BrainEngine::_parseAndAct(const String& aiText, const String& userMessage, 
         if (remEnd != -1) {
             String fact = cleanText.substring(remIdx + 10, remEnd);
             fact.trim();
-            // Append to knownFacts with separator
             int curLen = strlen(_knownFacts);
             if (curLen < 480) {
                 strncat(_knownFacts, " | ", 511 - curLen);
                 strncat(_knownFacts, fact.c_str(), 511 - strlen(_knownFacts));
                 _saveProfile();
             }
-            // Remove [REMEMBER:...] from displayed text
             cleanText = cleanText.substring(0, remIdx) + cleanText.substring(remEnd + 1);
             cleanText.trim();
         }
@@ -284,6 +281,43 @@ void BrainEngine::_parseAndAct(const String& aiText, const String& userMessage, 
     // Tell SoulEngine
     _soul->onAIResponseReceived(emotion, intensity, cleanText);
 
-    // Play phoneme voice synced with text
-    _audio->playPhonemes(words, cleanText.c_str());
+    // Dispatch matching emotional HD voice or signature chirp
+    switch (emotion) {
+        case EMOTION_LOVE:
+            _audio->playHD(voice_love_data, sizeof(voice_love_data), 3, cleanText.c_str());
+            break;
+        case EMOTION_PARTY_DJ:
+            _audio->playHD(voice_party_data, sizeof(voice_party_data), 1, cleanText.c_str());
+            break;
+        case EMOTION_KAWAII_CAT:
+            _audio->playHD(voice_cat_data, sizeof(voice_cat_data), 4, cleanText.c_str());
+            break;
+        case EMOTION_KAWAII_KISS:
+            _audio->playHD(voice_kiss_data, sizeof(voice_kiss_data), 4, cleanText.c_str());
+            break;
+        case EMOTION_FIRE_RAGE:
+            _audio->playHD(voice_fire_data, sizeof(voice_fire_data), 3, cleanText.c_str());
+            break;
+        case EMOTION_MATRIX_HACKER:
+            _audio->playHD(voice_hacker_data, sizeof(voice_hacker_data), 2, cleanText.c_str());
+            break;
+        case EMOTION_RAINY_SAD:
+            _audio->playHD(voice_sad_data, sizeof(voice_sad_data), 0, cleanText.c_str());
+            break;
+        case EMOTION_COOL_SUNGLASSES:
+        case EMOTION_TADA:
+            _audio->playHD(voice_tada_data, sizeof(voice_tada_data), 3, cleanText.c_str());
+            break;
+        case EMOTION_SLEEP:
+            _audio->playHD(voice_sleep_data, sizeof(voice_sleep_data), 0, cleanText.c_str());
+            break;
+        case EMOTION_HELLO:
+        default:
+            if (intensity >= 70) {
+                _audio->playHD(voice_hello_data, sizeof(voice_hello_data), 2, cleanText.c_str());
+            } else {
+                _audio->playPhonemes(words, cleanText.c_str());
+            }
+            break;
+    }
 }

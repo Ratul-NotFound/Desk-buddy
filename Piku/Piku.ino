@@ -213,6 +213,10 @@ void handleCommand() {
         else if (c=="nod")    { servo.performGesture(GESTURE_NOD); }
         else if (c=="shake")  { servo.performGesture(GESTURE_SHAKE); }
         else if (c=="wiggle") { servo.performGesture(GESTURE_WIGGLE); }
+        else if (c=="purr")   { servo.performGesture(GESTURE_PURR); soul.triggerEmotion(EMOTION_KAWAII_CAT,70,3000); audio.playHD(voice_cat_data,sizeof(voice_cat_data),4,"Purr!"); }
+        else if (c=="yawn")   { servo.performGesture(GESTURE_YAWN); audio.playChirp(600,300,200); }
+        else if (c=="startle"){ servo.performGesture(GESTURE_STARTLE); audio.playChirp(1600,600,90); }
+        else if (c=="confused"){ servo.performGesture(GESTURE_CONFUSED); audio.playChirp(650,950,90); }
         else if (c=="flap_start") {
             soul.setState(STATE_GAME_FLAPPY); flappyBirdY=28; flappyVel=0; flappyScore=0;
             flappyPipeX=120; flappyPipeGapY=24; flappyOver=false; nextFlappyTick=millis();

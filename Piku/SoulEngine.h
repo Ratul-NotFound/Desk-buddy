@@ -66,11 +66,10 @@ private:
     bool   _pendingAIRequest  = false;
     String _pendingAITopic;
 
-    // Clap cooldown
+    // Clap cooldown & quirk timers
     unsigned long _clapCoolUntil = 0;
     unsigned long _nextQuirk     = 0;
 
-    void _triggerVoiceForEmotion(RobotEmotion e);
     void _doMetabolismTick();
     void _doGazeUpdate();
     void _doAutoTalkCheck();

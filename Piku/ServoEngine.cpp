@@ -64,7 +64,7 @@ void ServoEngine::update() {
             }
             case GESTURE_TILT_LEFT: {
                 float angles[] = { 68.0f, 90.0f };
-                int delays[]   = { 1200,  300 };
+                int delays[]   = { 1100,  300 };
                 if (_gestureStep < 2) {
                     _target = angles[_gestureStep];
                     _nextStepTime = now + delays[_gestureStep];
@@ -77,7 +77,7 @@ void ServoEngine::update() {
             }
             case GESTURE_TILT_RIGHT: {
                 float angles[] = { 112.0f, 90.0f };
-                int delays[]   = { 1200,   300 };
+                int delays[]   = { 1100,   300 };
                 if (_gestureStep < 2) {
                     _target = angles[_gestureStep];
                     _nextStepTime = now + delays[_gestureStep];
@@ -89,9 +89,9 @@ void ServoEngine::update() {
                 break;
             }
             case GESTURE_CURIOUS: {
-                // Curious tilt with slight overshoot and hold
+                // Curious tilt with hold
                 float angles[] = { 116.0f, 110.0f, 90.0f };
-                int delays[]   = { 300,    1400,   350 };
+                int delays[]   = { 300,    1300,   350 };
                 if (_gestureStep < 3) {
                     _target = angles[_gestureStep];
                     _nextStepTime = now + delays[_gestureStep];
@@ -107,6 +107,62 @@ void ServoEngine::update() {
                 float angles[] = { 115.0f, 65.0f, 112.0f, 68.0f, 105.0f, 75.0f, 90.0f };
                 int delays[]   = { 130,    130,   120,    120,   110,    110,   200 };
                 if (_gestureStep < 7) {
+                    _target = angles[_gestureStep];
+                    _nextStepTime = now + delays[_gestureStep];
+                    _gestureStep++;
+                } else {
+                    _gestureActive = false;
+                    _target = SERVO_CENTER;
+                }
+                break;
+            }
+            case GESTURE_PURR: {
+                // Gentle swaying for petting
+                float angles[] = { 84.0f, 96.0f, 86.0f, 94.0f, 90.0f };
+                int delays[]   = { 350,   350,   300,   300,   250 };
+                if (_gestureStep < 5) {
+                    _target = angles[_gestureStep];
+                    _nextStepTime = now + delays[_gestureStep];
+                    _gestureStep++;
+                } else {
+                    _gestureActive = false;
+                    _target = SERVO_CENTER;
+                }
+                break;
+            }
+            case GESTURE_YAWN: {
+                // Slow droop, stretch, and recover
+                float angles[] = { 74.0f, 72.0f, 94.0f, 90.0f };
+                int delays[]   = { 600,   1400,  400,   300 };
+                if (_gestureStep < 4) {
+                    _target = angles[_gestureStep];
+                    _nextStepTime = now + delays[_gestureStep];
+                    _gestureStep++;
+                } else {
+                    _gestureActive = false;
+                    _target = SERVO_CENTER;
+                }
+                break;
+            }
+            case GESTURE_STARTLE: {
+                // Quick jerk back and recover
+                float angles[] = { 114.0f, 80.0f, 98.0f, 90.0f };
+                int delays[]   = { 120,    140,   160,   200 };
+                if (_gestureStep < 4) {
+                    _target = angles[_gestureStep];
+                    _nextStepTime = now + delays[_gestureStep];
+                    _gestureStep++;
+                } else {
+                    _gestureActive = false;
+                    _target = SERVO_CENTER;
+                }
+                break;
+            }
+            case GESTURE_CONFUSED: {
+                // Inquisitive tilt left, pause, tilt right, center
+                float angles[] = { 76.0f, 76.0f, 104.0f, 90.0f };
+                int delays[]   = { 300,   800,   900,    300 };
+                if (_gestureStep < 4) {
                     _target = angles[_gestureStep];
                     _nextStepTime = now + delays[_gestureStep];
                     _gestureStep++;

@@ -7,8 +7,8 @@ void SoulEngine::init(DisplayEngine* disp, AudioEngine* audio, ServoEngine* serv
     _lastInteraction = millis();
     _nextAutoTalk    = millis() + _autoTalkIntervalMs;
     _nextMetabolism  = millis() + 45000;
-    _nextGazeShift   = millis() + random(1800, 4200);
-    _nextQuirk       = millis() + random(30000, 60000);
+    _nextGazeShift   = millis() + random(1500, 3500);
+    _nextQuirk       = millis() + random(18000, 38000);
 }
 
 void SoulEngine::update() {
@@ -23,16 +23,16 @@ void SoulEngine::update() {
 void SoulEngine::_doGazeUpdate() {
     unsigned long now = millis();
     if (now >= _nextGazeShift) {
-        _nextGazeShift = now + random(1800, 4500);
+        _nextGazeShift = now + random(1500, 4000);
         _targetGazeX = random(-8, 9);
         _targetGazeY = random(-4, 5);
         if (_state == STATE_AWAKE_IDLE && _emotion == EMOTION_IDLE && !_servo->isBusy()) {
-            // Natural micro head tracking following eyes
-            _servo->setTarget(SERVO_CENTER + _targetGazeX * 1.6f);
+            // Natural micro-head tracking following eye saccades
+            _servo->setTarget(SERVO_CENTER + _targetGazeX * 2.2f);
         }
     }
-    gazeX += (_targetGazeX - gazeX) * 0.25f;
-    gazeY += (_targetGazeY - gazeY) * 0.25f;
+    gazeX += (_targetGazeX - gazeX) * 0.28f;
+    gazeY += (_targetGazeY - gazeY) * 0.28f;
 }
 
 void SoulEngine::_doEmotionResetCheck() {
@@ -41,7 +41,7 @@ void SoulEngine::_doEmotionResetCheck() {
         _state   = STATE_AWAKE_IDLE;
         _emotionResetTime = 0;
         if (!_servo->isBusy()) _servo->setTarget(SERVO_CENTER);
-        _disp->morphToEmotion(EMOTION_IDLE, 400);
+        _disp->morphToEmotion(EMOTION_IDLE, 350);
     }
 }
 
@@ -49,31 +49,72 @@ void SoulEngine::_doRandomQuirks() {
     if (_state != STATE_AWAKE_IDLE || _emotion != EMOTION_IDLE) return;
     unsigned long now = millis();
     if (now < _nextQuirk) return;
-    _nextQuirk = now + random(35000, 75000);
+    _nextQuirk = now + random(18000, 40000);
 
-    int quirk = random(0, 4);
+    int quirk = random(0, 9);
     switch (quirk) {
         case 0:
-            // Inquisitive chirp + curious head tilt
-            _audio->playChirp(750, 1350, 110);
+            // 1. Inquisitive chirp + curious head tilt
+            _audio->playChirp(750, 1400, 120);
+            _disp->triggerBlink();
             _servo->performGesture(GESTURE_CURIOUS);
             break;
         case 1:
-            // Playful nod + happy double-chirp
-            _audio->playChirp(900, 1400, 70);
+            // 2. Playful nod + happy double-chirp
+            _audio->playChirp(900, 1500, 80);
             _disp->triggerBlink();
             _servo->performGesture(GESTURE_NOD);
             break;
         case 2:
-            // Subtle wink + soft chirp
+            // 3. Cute sneeze / hiccup with shudder
+            _audio->playChirp(1600, 600, 90);
+            _servo->performGesture(GESTURE_STARTLE);
+            _disp->triggerBlink();
+            break;
+        case 3:
+            // 4. Melodic whistle / song tune
+            _audio->playChirp(800, 1100, 70);
+            _audio->playChirp(1100, 1400, 90);
+            _servo->performGesture(GESTURE_PURR);
+            break;
+        case 4:
+            // 5. Sleepy yawn & stretch
+            if (_energy < 60 || (now - _lastInteraction > 180000)) {
+                _audio->playChirp(600, 300, 200);
+                _servo->performGesture(GESTURE_YAWN);
+            } else {
+                _audio->playChirp(1000, 1500, 60);
+                _disp->triggerBlink();
+            }
+            break;
+        case 5:
+            // 6. Confused look around (left to right)
+            _targetGazeX = random(0, 2) == 0 ? 8 : -8;
+            _targetGazeY = random(-3, 4);
+            _audio->playChirp(650, 950, 90);
+            _servo->performGesture(GESTURE_CONFUSED);
+            break;
+        case 6:
+            // 7. Subtle wink + playful beep
             _disp->triggerBlink();
             _audio->playChirp(1100, 1600, 60);
             break;
-        case 3:
-            // Look around
-            _targetGazeX = random(0, 2) == 0 ? 8 : -8;
-            _targetGazeY = random(-3, 4);
-            _servo->performGesture(random(0, 2) == 0 ? GESTURE_TILT_LEFT : GESTURE_TILT_RIGHT);
+        case 7:
+            // 8. Affectionate moment
+            if (_affection >= 75) {
+                triggerEmotion(EMOTION_LOVE, 65, 2500);
+                _servo->performGesture(GESTURE_NOD);
+                _audio->playHD(voice_love_data, sizeof(voice_love_data), 3, "Love you! <3");
+            } else {
+                _audio->playChirp(850, 1300, 90);
+                _servo->performGesture(GESTURE_NOD);
+            }
+            break;
+        case 8:
+            // 9. Desk cat mode
+            triggerEmotion(EMOTION_KAWAII_CAT, 60, 2500);
+            _servo->performGesture(GESTURE_PURR);
+            _audio->playHD(voice_cat_data, sizeof(voice_cat_data), 4, "Nya!");
             break;
     }
 }
@@ -148,7 +189,6 @@ void SoulEngine::onAIResponseReceived(RobotEmotion e, int intensity, const Strin
     _state = STATE_AI_SPEAKING;
     triggerEmotion(e, intensity, 5000);
     _lastInteraction = millis();
-    _disp->startScrollMessage(text, "PIKU AI");
 }
 
 void SoulEngine::setAIThinking(bool thinking) {
@@ -166,15 +206,15 @@ void SoulEngine::setAIThinking(bool thinking) {
 void SoulEngine::onTouchShort() {
     _affection = min(100, _affection + 5);
     _lastInteraction = millis();
-    triggerEmotion(EMOTION_LOVE, 70, 3500);
-    _servo->performGesture(GESTURE_NOD);
+    triggerEmotion(EMOTION_LOVE, 75, 3500);
+    _servo->performGesture(GESTURE_PURR);
     _audio->playHD(voice_love_data, sizeof(voice_love_data), 3, "I Love You! <3");
 }
 
 void SoulEngine::onTouchSustained() {
     _affection = min(100, _affection + 10);
     _lastInteraction = millis();
-    triggerEmotion(EMOTION_KAWAII_CAT, 65, 3500);
+    triggerEmotion(EMOTION_KAWAII_CAT, 70, 3500);
     _servo->performGesture(GESTURE_CURIOUS);
     _audio->playHD(voice_cat_data, sizeof(voice_cat_data), 4, "Nya! Meow!");
 }
