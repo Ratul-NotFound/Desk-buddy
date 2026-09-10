@@ -36,6 +36,8 @@ public:
     void showVolumeHUD(int vol, bool muted);
     bool isScrolling() const { return _scrolling; }
 
+    void setClockWeather(const String& timeStr, const String& dateStr, int tempC, int hum, const String& cond);
+
     // For mini-games / special screens — called directly
     void renderFlappyGame(int birdY, float vel, int score, int hi, int pipeX, int pipeGapY, bool over);
     void renderRPS(const char* choice);
@@ -72,8 +74,15 @@ private:
 
     RobotEmotion _currentEmotion = EMOTION_IDLE;
 
-    // Overlay tick counter
+    // Overlay & animation tick counter
     unsigned long _overlayFrame = 0;
+
+    // Live clock and weather data for overlays
+    String _timeStr     = "--:--";
+    String _dateStr     = "---";
+    int    _tempC       = 25;
+    int    _humidity    = 65;
+    String _weatherCond = "Sunny";
 
     void   _drawEyes(const EyeShape& s, float gx, float gy, float openRatio);
     void   _drawOverlay(RobotEmotion e);

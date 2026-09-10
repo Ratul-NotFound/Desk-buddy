@@ -22,6 +22,14 @@ void DisplayEngine::init() {
     _nextBlink = millis() + random(3000, 6000);
 }
 
+void DisplayEngine::setClockWeather(const String& timeStr, const String& dateStr, int tempC, int hum, const String& cond) {
+    _timeStr     = timeStr;
+    _dateStr     = dateStr;
+    _tempC       = tempC;
+    _humidity    = hum;
+    _weatherCond = cond;
+}
+
 void DisplayEngine::morphToEmotion(RobotEmotion e, int durationMs) {
     if (_currentEmotion == e) return;
     _currentEmotion = e;
@@ -93,7 +101,7 @@ void DisplayEngine::update(AudioEngine* audio) {
         t = (float)(now - _morphStart) / (float)_morphDuration;
         t = constrain(t, 0.0f, 1.0f);
         // Ease in-out cubic
-        t = t < 0.5f ? 4*t*t*t : 1 - pow(-2*t + 2, 3) / 2;
+        t = t < 0.5f ? 4*t*t*t : 1.0f - pow(-2.0f*t + 2.0f, 3) / 2.0f;
     }
     _current = _lerpShape(_from, _to, t);
 
@@ -119,7 +127,12 @@ void DisplayEngine::update(AudioEngine* audio) {
                     _currentEmotion == EMOTION_MATRIX_HACKER ||
                     _currentEmotion == EMOTION_CURIOUS_SCAN ||
                     _currentEmotion == EMOTION_CLOCK_DISPLAY ||
-                    _currentEmotion == EMOTION_WEATHER_DISPLAY);
+                    _currentEmotion == EMOTION_WEATHER_DISPLAY ||
+                    _currentEmotion == EMOTION_JACKPOT_MONEY ||
+                    _currentEmotion == EMOTION_FOCUS_STUDY ||
+                    _currentEmotion == EMOTION_MAGIC_8BALL ||
+                    _currentEmotion == EMOTION_SNACK_EAT ||
+                    _currentEmotion == EMOTION_RPS_SHOW);
 
     _disp.clearDisplay();
 
@@ -171,41 +184,87 @@ void DisplayEngine::_drawOverlay(RobotEmotion e) {
     int f = (int)(_overlayFrame / 80) % 8;
     switch (e) {
         case EMOTION_LOVE:
-        case EMOTION_KAWAII_KISS:
             _drawHeart(EYE_L_CX, EYE_CY, 30);
             _drawHeart(EYE_R_CX, EYE_CY, 30);
             break;
-        case EMOTION_KAWAII_CAT:
-            // Cat ears
-            _disp.fillTriangle(EYE_L_CX - 16, EYE_CY - 16, EYE_L_CX, EYE_CY - 16,
-                               EYE_L_CX - 8, EYE_CY - 30, SSD1306_WHITE);
-            _disp.fillTriangle(EYE_R_CX, EYE_CY - 16, EYE_R_CX + 16, EYE_CY - 16,
-                               EYE_R_CX + 8, EYE_CY - 30, SSD1306_WHITE);
-            // Blush
-            for (int i = -3; i <= 3; i += 2) {
-                _disp.drawPixel(EYE_L_CX - 12 + i, EYE_CY + 12, SSD1306_WHITE);
-                _disp.drawPixel(EYE_R_CX + 10 + i, EYE_CY + 12, SSD1306_WHITE);
-            }
+        case EMOTION_KAWAII_KISS: {
+            _drawHeart(EYE_L_CX, EYE_CY, 26);
+            int hx = 64 + ((int)(_overlayFrame / 40) % 50);
+            int hy = 44 - ((int)(_overlayFrame / 40) % 32);
+            _drawHeart(hx, hy, 12);
             break;
+        }
+        case EMOTION_KAWAII_CAT: {
+            // Cat ears
+            int et = (f % 4 < 2) ? 2 : 0;
+            _disp.fillTriangle(EYE_L_CX - 16, EYE_CY - 12, EYE_L_CX + 2, EYE_CY - 12, EYE_L_CX - 7, EYE_CY - 28 - et, SSD1306_WHITE);
+            _disp.fillTriangle(EYE_R_CX - 2, EYE_CY - 12, EYE_R_CX + 16, EYE_CY - 12, EYE_R_CX + 7, EYE_CY - 28 - et, SSD1306_WHITE);
+            // Whisker lines
+            _disp.drawLine(8, 22, 18, 24, SSD1306_WHITE);
+            _disp.drawLine(8, 28, 18, 26, SSD1306_WHITE);
+            _disp.drawLine(120, 22, 110, 24, SSD1306_WHITE);
+            _disp.drawLine(120, 28, 110, 26, SSD1306_WHITE);
+            // Cute mouth
+            _disp.drawCircle(60, 48, 3, SSD1306_WHITE);
+            _disp.fillRect(57, 45, 6, 3, SSD1306_BLACK);
+            _disp.drawCircle(66, 48, 3, SSD1306_WHITE);
+            _disp.fillRect(66, 45, 6, 3, SSD1306_BLACK);
+            break;
+        }
+        case EMOTION_COOL_SUNGLASSES: {
+            // Sunglasses frames
+            _disp.fillRoundRect(EYE_L_CX - 22, EYE_CY - 14, 44, 28, 5, SSD1306_WHITE);
+            _disp.fillRoundRect(EYE_R_CX - 22, EYE_CY - 14, 44, 28, 5, SSD1306_WHITE);
+            _disp.fillRect(EYE_L_CX + 18, EYE_CY - 10, 18, 6, SSD1306_WHITE);
+            // Glare reflection lines
+            int gx = (int)(_overlayFrame / 20) % 30 - 15;
+            _disp.drawLine(EYE_L_CX - 12 + gx, EYE_CY + 10, EYE_L_CX - 4 + gx, EYE_CY - 10, SSD1306_BLACK);
+            _disp.drawLine(EYE_R_CX - 12 + gx, EYE_CY + 10, EYE_R_CX - 4 + gx, EYE_CY - 10, SSD1306_BLACK);
+            // Cool smile
+            _disp.drawCircle(64, 46, 8, SSD1306_WHITE);
+            _disp.fillRect(52, 40, 24, 8, SSD1306_BLACK);
+            break;
+        }
         case EMOTION_SLEEP:
             _disp.setTextSize(1); _disp.setTextColor(SSD1306_WHITE);
             if (f >= 0) { _disp.setCursor(80, 26); _disp.print(F("z")); }
             if (f >= 3) { _disp.setCursor(92, 16); _disp.print(F("Z")); }
             if (f >= 6) { _disp.setCursor(106, 6); _disp.print(F("Z")); }
             break;
-        case EMOTION_RAINY_SAD:
-            for (int i = 0; i < 6; i++) {
-                int rx = 12 + i * 20;
-                int ry = ((int)(_overlayFrame / 5) + i * 14) % 40 + 10;
-                _disp.drawLine(rx, ry, rx - 2, ry + 6, SSD1306_WHITE);
-            }
+        case EMOTION_RAINY_SAD: {
+            // Rain cloud
+            _disp.fillCircle(50, 8, 6, SSD1306_WHITE);
+            _disp.fillCircle(64, 6, 8, SSD1306_WHITE);
+            _disp.fillCircle(78, 8, 6, SSD1306_WHITE);
+            _disp.fillRoundRect(42, 8, 44, 6, 3, SSD1306_WHITE);
+            int dy = 16 + ((int)(_overlayFrame / 30) % 36);
+            _disp.drawLine(48, dy, 48, dy + 3, SSD1306_WHITE);
+            _disp.drawLine(64, (dy + 12) % 36 + 16, 64, (dy + 12) % 36 + 19, SSD1306_WHITE);
+            _disp.drawLine(80, (dy + 24) % 36 + 16, 80, (dy + 24) % 36 + 27, SSD1306_WHITE);
+            // Sad mouth
+            _disp.drawCircle(64, 56, 4, SSD1306_WHITE);
+            _disp.fillRect(58, 56, 12, 6, SSD1306_BLACK);
             break;
+        }
         case EMOTION_FIRE_RAGE: {
-            int fs = (int)(_overlayFrame / 40) % 12;
-            for (int i = 0; i < 8; i++) {
-                int fx = 12 + i * 14;
-                int fh = 6 + (fs + i * 3) % 10;
-                _disp.fillTriangle(fx - 4, 16, fx + 4, 16, fx, 16 - fh, SSD1306_WHITE);
+            int fs = (int)(_overlayFrame / 40);
+            for (int i = 0; i < 3; i++) {
+                int fh1 = 6 + (int)(10 * fabs(sin((fs * 0.4) + i)));
+                int fh2 = 6 + (int)(10 * fabs(cos((fs * 0.4) + i)));
+                _disp.fillTriangle(EYE_L_CX - 12 + i*10, EYE_CY - 16, EYE_L_CX - 8 + i*10, EYE_CY - 16 - fh1, EYE_L_CX - 4 + i*10, EYE_CY - 16, SSD1306_WHITE);
+                _disp.fillTriangle(EYE_R_CX - 12 + i*10, EYE_CY - 16, EYE_R_CX - 8 + i*10, EYE_CY - 16 - fh2, EYE_R_CX - 4 + i*10, EYE_CY - 16, SSD1306_WHITE);
+            }
+            // Clenched teeth mouth
+            _disp.drawRect(52, 48, 24, 6, SSD1306_WHITE);
+            for (int x = 56; x < 76; x += 4) _disp.drawFastVLine(x, 48, 6, SSD1306_WHITE);
+            break;
+        }
+        case EMOTION_HYPNO_DIZZY: {
+            int rot = (int)(_overlayFrame / 30);
+            for (int r = 16; r > 3; r -= 5) {
+                int offset = (rot + r * 2) % 8;
+                _disp.drawRoundRect(EYE_L_CX - r, EYE_CY - r, r*2, r*2, offset, SSD1306_WHITE);
+                _disp.drawRoundRect(EYE_R_CX - r, EYE_CY - r, r*2, r*2, offset, SSD1306_WHITE);
             }
             break;
         }
@@ -227,7 +286,6 @@ void DisplayEngine::_drawMouth(int shape) {
 }
 
 void DisplayEngine::_renderSpeechFace(int mouthShape, const char* subtitle) {
-    EyeShape neutral = _targetShapeFor(EMOTION_HELLO);
     _renderIdle(0, 0, 1.0f);
     _drawMouth(mouthShape);
     if (subtitle) {
@@ -246,7 +304,7 @@ void DisplayEngine::_renderSpecial() {
             int b1 = 8 + f % 24, b2 = 8 + (f + 12) % 24;
             _disp.fillRoundRect(EYE_L_CX - 16, EYE_CY - b1/2, 32, b1, 4, SSD1306_WHITE);
             _disp.fillRoundRect(EYE_R_CX - 16, EYE_CY - b2/2, 32, b2, 4, SSD1306_WHITE);
-            _disp.fillRect(64 - f%20/2, 54, f%20, 4, SSD1306_WHITE);
+            _disp.fillRect(64 - (f%20)/2, 54, f%20, 4, SSD1306_WHITE);
             break;
         }
         case EMOTION_SENTRY_ALERT:
@@ -255,6 +313,27 @@ void DisplayEngine::_renderSpecial() {
             _disp.setTextSize(2); _disp.setCursor(8, 14); _disp.print(F("SENTRY"));
             _disp.setTextSize(1); _disp.setCursor(8, 42); _disp.print(F("INTRUDER DETECTED!"));
             break;
+        case EMOTION_GAMER_PACMAN: {
+            int px = ((int)(_overlayFrame / 40) * 4) % 140 - 20;
+            _disp.fillCircle(px, EYE_CY, 18, SSD1306_WHITE);
+            int mouthOpen = ((f / 4) % 2 == 0) ? 14 : 4;
+            _disp.fillTriangle(px, EYE_CY, px + 20, EYE_CY - mouthOpen, px + 20, EYE_CY + mouthOpen, SSD1306_BLACK);
+            for (int dot = px + 28; dot < 128; dot += 18) {
+                _disp.fillCircle(dot, EYE_CY, 3, SSD1306_WHITE);
+            }
+            int gx = px - 32;
+            int gy = EYE_CY - 16;
+            _disp.fillRoundRect(gx, gy, 24, 32, 10, SSD1306_WHITE);
+            int footShift = ((f / 2) % 2 == 0) ? 0 : 2;
+            _disp.fillRect(gx + 2 + footShift, gy + 22, 5, 4, SSD1306_BLACK);
+            _disp.fillRect(gx + 11 + footShift, gy + 22, 5, 4, SSD1306_BLACK);
+            _disp.fillRect(gx + 19 - footShift, gy + 22, 5, 4, SSD1306_BLACK);
+            _disp.fillCircle(gx + 7, gy + 8, 3, SSD1306_BLACK);
+            _disp.fillCircle(gx + 17, gy + 8, 3, SSD1306_BLACK);
+            _disp.setTextSize(1); _disp.setTextColor(SSD1306_WHITE);
+            _disp.setCursor(18, 54); _disp.print(F("LEVEL UP! [ 1UP ]"));
+            break;
+        }
         case EMOTION_MATRIX_HACKER:
             for (int col = 6; col < 124; col += 12) {
                 int sy = (f * 3 + col * 7) % 50;
@@ -275,7 +354,49 @@ void DisplayEngine::_renderSpecial() {
             _disp.setCursor(14, 54); _disp.print(F("AI THINKING..."));
             break;
         }
-        default: _renderIdle(_gazeX, _gazeY, 1.0f); break;
+        case EMOTION_CLOCK_DISPLAY:
+            renderClockScreen(_timeStr.c_str(), _dateStr.c_str());
+            break;
+        case EMOTION_WEATHER_DISPLAY:
+            renderWeatherScreen(_tempC, _humidity, _weatherCond.c_str());
+            break;
+        case EMOTION_JACKPOT_MONEY: {
+            _disp.drawRoundRect(EYE_L_CX - 18, EYE_CY - 18, 36, 36, 4, SSD1306_WHITE);
+            _disp.drawRoundRect(EYE_R_CX - 18, EYE_CY - 18, 36, 36, 4, SSD1306_WHITE);
+            _disp.setTextSize(2); _disp.setTextColor(SSD1306_WHITE);
+            _disp.setCursor(EYE_L_CX - 6, EYE_CY - 7); _disp.print(F("$"));
+            _disp.setCursor(EYE_R_CX - 6, EYE_CY - 7); _disp.print(F("$"));
+            int cy = 4 + (f * 2 % 54);
+            _disp.fillCircle(12, cy, 3, SSD1306_WHITE);
+            _disp.fillCircle(116, (cy + 18) % 54 + 4, 3, SSD1306_WHITE);
+            _disp.setTextSize(1); _disp.setCursor(24, 54); _disp.print(F("JACKPOT! $$$"));
+            break;
+        }
+        case EMOTION_FOCUS_STUDY: {
+            _disp.drawCircle(EYE_L_CX, EYE_CY, 16, SSD1306_WHITE);
+            _disp.drawCircle(EYE_R_CX, EYE_CY, 16, SSD1306_WHITE);
+            _disp.drawLine(EYE_L_CX + 16, EYE_CY - 4, EYE_R_CX - 16, EYE_CY - 4, SSD1306_WHITE);
+            _disp.fillCircle(EYE_L_CX, EYE_CY, 5, SSD1306_WHITE);
+            _disp.fillCircle(EYE_R_CX, EYE_CY, 5, SSD1306_WHITE);
+            _disp.drawRoundRect(20, 48, 88, 12, 3, SSD1306_WHITE);
+            int bar = 4 + (f % 80);
+            _disp.fillRect(22, 50, bar, 8, SSD1306_WHITE);
+            _disp.setTextSize(1); _disp.setTextColor(SSD1306_WHITE);
+            _disp.setCursor(24, 2); _disp.print(F("FOCUS MODE [ 25:00 ]"));
+            break;
+        }
+        case EMOTION_MAGIC_8BALL:
+            renderMagic8Ball("YES!");
+            break;
+        case EMOTION_SNACK_EAT:
+            renderSnackEat(f / 4);
+            break;
+        case EMOTION_RPS_SHOW:
+            renderRPS("ROCK");
+            break;
+        default:
+            _renderIdle(_gazeX, _gazeY, 1.0f);
+            break;
     }
 }
 
@@ -314,11 +435,11 @@ void DisplayEngine::showVolumeHUD(int vol, bool muted) {
     if (!_ready) return;
     _disp.clearDisplay();
     _disp.setTextSize(1); _disp.setTextColor(SSD1306_WHITE);
-    _disp.setCursor(38, 10); _disp.print(F("VOLUME"));
+    _disp.setCursor(42, 8); _disp.print(F("VOLUME"));
     int fillW = muted ? 0 : (vol * 96) / 100;
-    _disp.drawRoundRect(16, 28, 96, 16, 4, SSD1306_WHITE);
-    if (fillW > 0) _disp.fillRoundRect(16, 28, fillW, 16, 4, SSD1306_WHITE);
-    _disp.setCursor(30, 50);
+    _disp.drawRoundRect(16, 24, 96, 16, 4, SSD1306_WHITE);
+    if (fillW > 0) _disp.fillRoundRect(16, 24, fillW, 16, 4, SSD1306_WHITE);
+    _disp.setCursor(44, 46);
     if (muted || vol == 0) _disp.print(F("MUTED"));
     else { _disp.print(vol); _disp.print(F("%")); }
     _disp.display();
@@ -328,13 +449,16 @@ void DisplayEngine::showVolumeHUD(int vol, bool muted) {
 void DisplayEngine::renderFlappyGame(int bY, float vel, int score, int hi, int pX, int pGY, bool over) {
     if (!_ready) return;
     _disp.clearDisplay();
+    // Bird
     _disp.fillCircle(24, bY, 6, SSD1306_WHITE);
     _disp.fillCircle(26, bY - 2, 2, SSD1306_BLACK);
     _disp.fillTriangle(30, bY - 1, 35, bY + 1, 30, bY + 3, SSD1306_WHITE);
+    // Pipes
     _disp.fillRect(pX, 0, 16, pGY, SSD1306_WHITE);
     _disp.fillRect(pX - 2, pGY - 4, 20, 4, SSD1306_WHITE);
     _disp.fillRect(pX, pGY + 28, 16, 64 - (pGY + 28), SSD1306_WHITE);
     _disp.fillRect(pX - 2, pGY + 28, 20, 4, SSD1306_WHITE);
+    // Score HUD
     _disp.setTextSize(1); _disp.setTextColor(SSD1306_WHITE);
     _disp.setCursor(4, 2); _disp.print(F("SCORE:")); _disp.print(score);
     _disp.setCursor(76, 2); _disp.print(F("HI:")); _disp.print(hi);
@@ -352,9 +476,10 @@ void DisplayEngine::renderRPS(const char* choice) {
     _disp.clearDisplay();
     _disp.setTextSize(1); _disp.setTextColor(SSD1306_WHITE);
     _disp.setCursor(14, 4); _disp.print(F("ROCK PAPER SCISSORS"));
-    _disp.drawRoundRect(24, 18, 80, 42, 6, SSD1306_WHITE);
+    _disp.drawRoundRect(20, 18, 88, 42, 6, SSD1306_WHITE);
     _disp.setTextSize(2);
-    _disp.setCursor(64 - strlen(choice) * 6, 30);
+    int len = strlen(choice);
+    _disp.setCursor(64 - len * 6, 30);
     _disp.print(choice);
     _disp.display();
 }
@@ -370,19 +495,19 @@ void DisplayEngine::renderSnackEat(int frame) {
     int h = (frame % 2 == 0) ? 36 : 14;
     _disp.fillRoundRect(EYE_L_CX - 16, EYE_CY - h/2, 32, h, 6, SSD1306_WHITE);
     _disp.fillRoundRect(EYE_R_CX - 16, EYE_CY - h/2, 32, h, 6, SSD1306_WHITE);
-    _disp.fillCircle(64, 50, (frame%2==0)?10:3, SSD1306_WHITE);
+    _disp.fillCircle(64, 50, (frame % 2 == 0) ? 10 : 3, SSD1306_WHITE);
     _disp.display();
 }
 
 void DisplayEngine::renderMagic8Ball(const char* answer) {
     if (!_ready) return;
     _disp.clearDisplay();
-    _disp.drawCircle(64, 30, 24, SSD1306_WHITE);
-    _disp.fillCircle(64, 30, 14, SSD1306_WHITE);
-    _disp.fillTriangle(54, 36, 74, 36, 64, 20, SSD1306_BLACK);
+    _disp.drawCircle(64, 26, 22, SSD1306_WHITE);
+    _disp.fillCircle(64, 26, 12, SSD1306_WHITE);
+    _disp.fillTriangle(56, 31, 72, 31, 64, 18, SSD1306_BLACK);
     _disp.setTextSize(1); _disp.setTextColor(SSD1306_WHITE);
     int len = strlen(answer);
-    _disp.setCursor(max(4, (128 - len*6)/2), 58);
+    _disp.setCursor(max(4, (128 - len*6)/2), 54);
     _disp.print(answer);
     _disp.display();
 }
@@ -396,9 +521,11 @@ void DisplayEngine::renderClockScreen(const char* timeStr, const char* dateStr) 
     _disp.fillCircle(EYE_R_CX, 12, 3, SSD1306_BLACK);
     _disp.drawRoundRect(4, 24, 120, 38, 5, SSD1306_WHITE);
     _disp.setTextSize(2); _disp.setTextColor(SSD1306_WHITE);
-    _disp.setCursor(64 - strlen(timeStr)*6, 28); _disp.print(timeStr);
+    int tLen = strlen(timeStr);
+    _disp.setCursor(max(8, 64 - tLen*6), 28); _disp.print(timeStr);
     _disp.setTextSize(1);
-    _disp.setCursor(64 - strlen(dateStr)*3, 48); _disp.print(dateStr);
+    int dLen = strlen(dateStr);
+    _disp.setCursor(max(8, 64 - dLen*3), 48); _disp.print(dateStr);
     _disp.display();
 }
 
@@ -410,8 +537,8 @@ void DisplayEngine::renderWeatherScreen(int tempC, int humidity, const char* con
     _disp.setCursor(8, 8); _disp.print(F("LIVE WEATHER"));
     _disp.setTextSize(3); _disp.setCursor(10, 22);
     _disp.print(tempC); _disp.setTextSize(1); _disp.print(F("C"));
-    _disp.setCursor(80, 24); _disp.print(F("HUM:"));
-    _disp.setCursor(80, 34); _disp.print(humidity); _disp.print(F("%"));
+    _disp.setCursor(76, 24); _disp.print(F("HUM:"));
+    _disp.setCursor(76, 34); _disp.print(humidity); _disp.print(F("%"));
     _disp.setCursor(8, 48); _disp.print(condition);
     _disp.display();
 }

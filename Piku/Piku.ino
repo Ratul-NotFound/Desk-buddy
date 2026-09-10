@@ -80,6 +80,7 @@ void networkTask(void*) {
                 int t=25,h=65; String cond="Sunny";
                 net.fetchWeather(userLat, userLon, &t, &h, &cond);
                 brain.currentTempC = t; brain.currentHumidity = h; brain.currentWeather = cond;
+                disp.setClockWeather(brain.currentTime, brain.currentDate, t, h, cond);
                 disp.startScrollMessage("WiFi OK! Time+Weather synced.", "ONLINE");
                 audio.playHD(voice_tada_data, sizeof(voice_tada_data), 3, "WiFi Connected!");
             } else if (!connected) {
@@ -94,12 +95,14 @@ void networkTask(void*) {
             String cond=brain.currentWeather;
             net.fetchWeather(userLat, userLon, &t, &h, &cond);
             brain.currentTempC = t; brain.currentHumidity = h; brain.currentWeather = cond;
+            disp.setClockWeather(brain.currentTime, brain.currentDate, t, h, cond);
         }
 
-        // Update time strings in brain
+        // Update time strings in brain & display
         if (net.timeIsSynced) {
             brain.currentTime = net.getFormattedTime();
             brain.currentDate = net.getFormattedDate();
+            disp.setClockWeather(brain.currentTime, brain.currentDate, brain.currentTempC, brain.currentHumidity, brain.currentWeather);
         }
 
         // Autonomous AI talk (SoulEngine decides when)
@@ -115,7 +118,6 @@ void soulTask(void*) {
         soul.update();
         sensors.update();
         servo.update();
-        disp.update(&audio);
 
         // Game states
         unsigned long now = millis();
@@ -140,14 +142,13 @@ void soulTask(void*) {
                 if (flappyBirdY <= 0 || flappyBirdY >= 63 || hitPipe) flappyOver = true;
                 disp.renderFlappyGame(flappyBirdY, flappyVel, flappyScore, flappyHiScore, flappyPipeX, flappyPipeGapY, flappyOver);
             }
-        }
-        if (snackActive && now >= snackEnd) { snackActive = false; soul.setState(STATE_AWAKE_IDLE); }
-        if (rpsActive && now >= rpsEnd)     { rpsActive = false;   soul.setState(STATE_AWAKE_IDLE); }
-        if (magic8Active && now >= magic8End){ magic8Active=false; soul.triggerEmotion(EMOTION_IDLE,50,100); }
+        } else {
+            if (snackActive && now >= snackEnd) { snackActive = false; soul.setState(STATE_AWAKE_IDLE); }
+            if (rpsActive && now >= rpsEnd)     { rpsActive = false;   soul.setState(STATE_AWAKE_IDLE); }
+            if (magic8Active && now >= magic8End){ magic8Active=false; soul.triggerEmotion(EMOTION_IDLE,50,100); }
 
-        if (rpsActive)    disp.renderRPS(rpsChoice);
-        if (snackActive)  disp.renderSnackEat((int)(now/150)%4);
-        if (magic8Active) disp.renderMagic8Ball(magic8Ans);
+            disp.update(&audio);
+        }
 
         vTaskDelay(pdMS_TO_TICKS(33));
     }
@@ -198,11 +199,20 @@ void handleCommand() {
         else if (c=="kiss")   { soul.triggerEmotion(EMOTION_KAWAII_KISS,75,4500); audio.playHD(voice_kiss_data,sizeof(voice_kiss_data),4,"Mwah!"); }
         else if (c=="fire")   { soul.triggerEmotion(EMOTION_FIRE_RAGE,90,4500); audio.playHD(voice_fire_data,sizeof(voice_fire_data),3,"POWER!"); }
         else if (c=="matrix") { soul.triggerEmotion(EMOTION_MATRIX_HACKER,70,4500); audio.playHD(voice_hacker_data,sizeof(voice_hacker_data),2,"ACCESS GRANTED!"); }
+        else if (c=="pacman") { soul.triggerEmotion(EMOTION_GAMER_PACMAN,75,4500); audio.playHD(voice_game_data,sizeof(voice_game_data),3,"Level Up!"); }
+        else if (c=="money")  { soul.triggerEmotion(EMOTION_JACKPOT_MONEY,80,4500); audio.playHD(voice_money_data,sizeof(voice_money_data),3,"JACKPOT! $$$"); }
+        else if (c=="dizzy")  { soul.triggerEmotion(EMOTION_HYPNO_DIZZY,80,4000); audio.playHD(voice_dizzy_data,sizeof(voice_dizzy_data),1,"Head Spinning!"); }
+        else if (c=="sad")    { soul.triggerEmotion(EMOTION_RAINY_SAD,60,4000); audio.playHD(voice_sad_data,sizeof(voice_sad_data),0,"Cheer up! <3"); }
+        else if (c=="uhoh")   { soul.triggerEmotion(EMOTION_UHOH_ALERT,70,3000); audio.playHD(voice_uhoh_data,sizeof(voice_uhoh_data),1,"Uh-Oh!"); }
+        else if (c=="tada")   { soul.triggerEmotion(EMOTION_TADA,85,3500); audio.playHD(voice_tada_data,sizeof(voice_tada_data),3,"Ta-Da!"); }
         else if (c=="clock")  { soul.triggerEmotion(EMOTION_CLOCK_DISPLAY,50,6000); audio.playChirp(800,1400,120); }
         else if (c=="weather"){ soul.triggerEmotion(EMOTION_WEATHER_DISPLAY,50,6000); audio.playChirp(600,1000,150); }
-        else if (c=="study")  { soul.triggerEmotion(EMOTION_FOCUS_STUDY,60,15000); audio.playHD(voice_focus_data,sizeof(voice_focus_data),2,"Focus!"); }
+        else if (c=="study")  { soul.triggerEmotion(EMOTION_FOCUS_STUDY,60,15000); audio.playHD(voice_focus_data,sizeof(voice_focus_data),2,"Focus Mode Active!"); }
         else if (c=="sleep")  { soul.setState(STATE_DEEP_SLEEP); soul.triggerEmotion(EMOTION_SLEEP,70,0); audio.playHD(voice_sleep_data,sizeof(voice_sleep_data),0,"Zzz..."); }
-        else if (c=="sentry") { soul.setState(STATE_SENTRY_GUARD); sentryActive=true; audio.playHD(voice_sentry_data,sizeof(voice_sentry_data),1,"INTRUDER!"); }
+        else if (c=="sentry") { soul.setState(STATE_SENTRY_GUARD); sentryActive=true; soul.triggerEmotion(EMOTION_SENTRY_ALERT,90,5000); audio.playHD(voice_sentry_data,sizeof(voice_sentry_data),1,"INTRUDER!"); }
+        else if (c=="nod")    { servo.performGesture(GESTURE_NOD); }
+        else if (c=="shake")  { servo.performGesture(GESTURE_SHAKE); }
+        else if (c=="wiggle") { servo.performGesture(GESTURE_WIGGLE); }
         else if (c=="flap_start") {
             soul.setState(STATE_GAME_FLAPPY); flappyBirdY=28; flappyVel=0; flappyScore=0;
             flappyPipeX=120; flappyPipeGapY=24; flappyOver=false; nextFlappyTick=millis();
@@ -216,19 +226,20 @@ void handleCommand() {
         }
         else if (c=="rps") {
             const char* choices[]={"ROCK","PAPER","SCISSORS"};
-            rpsChoice=choices[random(0,3)]; soul.setState(STATE_GAME_RPS);
-            rpsActive=true; rpsEnd=millis()+4000;
+            rpsChoice=choices[random(0,3)];
+            soul.triggerEmotion(EMOTION_RPS_SHOW,70,4000);
             audio.playHD(voice_rps_data,sizeof(voice_rps_data),3,"1,2,3 SHOOT!");
         }
         else if (c=="8ball") {
             const char* answers[]={"YES!","NO WAY!","MAYBE!","TRY AGAIN","ABSOLUTELY"};
-            magic8Ans=answers[random(0,5)]; magic8Active=true; magic8End=millis()+4500;
+            magic8Ans=answers[random(0,5)];
+            soul.triggerEmotion(EMOTION_MAGIC_8BALL,60,4500);
             audio.playChirp(500,1500,200);
         }
         else if (c=="snack") {
-            soul.feedSnack(); soul.setState(STATE_SNACK_FEEDING);
-            snackActive=true; snackEnd=millis()+3000;
-            audio.playHD(voice_snack_data,sizeof(voice_snack_data),3,"YUM!");
+            soul.feedSnack();
+            soul.triggerEmotion(EMOTION_SNACK_EAT,70,3500);
+            audio.playHD(voice_snack_data,sizeof(voice_snack_data),3,"YUM YUM!");
         }
     }
     server.send(200,"text/plain","OK");
@@ -256,6 +267,7 @@ void handleStatus() {
     j += "\"key_count\":"        + String(brain.getKeyCount()) + ",";
     j += "\"active_key\":"       + String(brain.getActiveKeyIndex()+1) + ",";
     j += "\"owner_name\":\""     + brain.getOwnerName() + "\",";
+    j += "\"onboarding_done\":"  + String(brain.isOnboardingDone()?"true":"false") + ",";
     j += "\"auto_talk_min\":"    + String(soul.getAutoTalkIntervalMinutes()) + ",";
     // Clean last reply of emotion tags for display
     String lr = brain.getLastReply();
@@ -335,6 +347,7 @@ void handleSync() {
     String cond=brain.currentWeather;
     net.fetchWeather(userLat,userLon,&t,&h,&cond);
     brain.currentTempC=t; brain.currentHumidity=h; brain.currentWeather=cond;
+    disp.setClockWeather(brain.currentTime, brain.currentDate, t, h, cond);
     server.send(200,"text/plain","OK");
 }
 
@@ -398,7 +411,14 @@ void setup() {
     sensors.setSoundEnabled(soundEnabled);
 
     // 3. Wire sensor callbacks to SoulEngine
-    sensors.onTouchShort([]()     { soul.onTouchShort(); });
+    sensors.onTouchShort([]() {
+        if (soul.getState() == STATE_GAME_FLAPPY) {
+            if (flappyOver) { flappyBirdY = 28; flappyVel = 0; flappyScore = 0; flappyPipeX = 120; flappyOver = false; }
+            else flappyVel = -8.0f;
+        } else {
+            soul.onTouchShort();
+        }
+    });
     sensors.onTouchSustained([]() { soul.onTouchSustained(); });
     sensors.onTouchOverpet([]()   { soul.onTouchOverpet(); });
     sensors.onDoubleClap([]()     { soul.onDoubleClap(); });

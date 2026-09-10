@@ -7,7 +7,7 @@ const char WEBUI_HTML[] PROGMEM = R"rawliteral(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>PIKU AI</title>
+<title>PIKU AI — Desk Companion</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{background:#111;color:#eee;font-family:system-ui,-apple-system,sans-serif;padding:10px;min-height:100vh}
@@ -52,11 +52,22 @@ input:focus,textarea:focus,select:focus{border-color:var(--a)}
 .chip{font-size:10px;padding:4px 8px;background:var(--d);border:1px solid #333;border-radius:16px;cursor:pointer;white-space:nowrap}
 .chip:active{background:var(--a);color:#111;border-color:var(--a)}
 .emo-ico{font-size:18px}
+#onboarding-box{display:none;background:#00382e;border:1px solid var(--a);border-radius:10px;padding:12px;margin-bottom:10px}
 </style>
 </head>
 <body>
 <div class="wrap">
-<h1>🤖 PIKU</h1>
+<h1>🤖 PIKU AI</h1>
+
+<div id="onboarding-box">
+  <div style="font-weight:700;color:var(--a);margin-bottom:4px">👋 Welcome! Meet your new AI buddy.</div>
+  <div style="font-size:12px;color:#ccc;margin-bottom:8px">What should Piku call you?</div>
+  <div class="row">
+    <input type="text" id="onboard-inp" placeholder="Enter your name...">
+    <button class="btn p" onclick="submitOnboarding()" style="padding:9px 14px">Set Name</button>
+  </div>
+</div>
+
 <div class="status-row">
   <div>
     <span id="cpill" class="pill">AP 192.168.4.1</span>
@@ -78,7 +89,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--a)}
 <!-- STATUS TAB -->
 <div class="pane active" id="p0">
   <div class="card">
-    <div class="label">VITALS</div>
+    <div class="label">VITALS & METABOLISM</div>
     <div class="vrow"><span>❤️ Affection</span><span id="sa">85%</span></div>
     <div class="vbar"><div class="vfill" id="ba" style="width:85%"></div></div>
     <div class="vrow" style="margin-top:8px"><span>⚡ Energy</span><span id="se">100%</span></div>
@@ -93,7 +104,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--a)}
   <div class="card">
     <div class="label">SPONTANEOUS TALK INTERVAL</div>
     <select id="auto-talk-sel" onchange="setAutoTalk(this.value)" style="margin-top:6px">
-      <option value="0">Off</option>
+      <option value="0">Off (Silent unless spoken to)</option>
       <option value="5">Every 5 minutes</option>
       <option value="10" selected>Every 10 minutes</option>
       <option value="20">Every 20 minutes</option>
@@ -122,6 +133,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--a)}
       <div class="chip" onclick="chip('What is the weather like?')">🌤️ Weather?</div>
       <div class="chip" onclick="chip('Tell me a short witty joke!')">😂 Joke</div>
       <div class="chip" onclick="chip('How are you feeling right now?')">❤️ Feeling?</div>
+      <div class="chip" onclick="chip('Share a fun fact with me!')">💡 Fun Fact</div>
     </div>
     <div class="toggle" style="margin-top:8px;border-top:1px solid #222;padding-top:8px">
       <span style="font-size:11px;color:#888">🔊 Speak replies in browser</span>
@@ -145,7 +157,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--a)}
     </div>
   </div>
   <div class="card">
-    <div class="label">EXPRESSIONS</div>
+    <div class="label">EXPRESSIONS & EMOTIONS</div>
     <div class="g4" style="margin-top:6px">
       <button class="btn" onclick="cmd('hello')"><div class="emo-ico">👋</div><div>Hello</div></button>
       <button class="btn" onclick="cmd('love')"><div class="emo-ico">❤️</div><div>Love</div></button>
@@ -155,6 +167,12 @@ input:focus,textarea:focus,select:focus{border-color:var(--a)}
       <button class="btn" onclick="cmd('kiss')"><div class="emo-ico">😘</div><div>Kiss</div></button>
       <button class="btn" onclick="cmd('fire')"><div class="emo-ico">🔥</div><div>Fire</div></button>
       <button class="btn" onclick="cmd('matrix')"><div class="emo-ico">💻</div><div>Hacker</div></button>
+      <button class="btn" onclick="cmd('pacman')"><div class="emo-ico">👾</div><div>Pacman</div></button>
+      <button class="btn" onclick="cmd('money')"><div class="emo-ico">💰</div><div>Money</div></button>
+      <button class="btn" onclick="cmd('dizzy')"><div class="emo-ico">😵</div><div>Dizzy</div></button>
+      <button class="btn" onclick="cmd('sad')"><div class="emo-ico">😢</div><div>Sad</div></button>
+      <button class="btn" onclick="cmd('uhoh')"><div class="emo-ico">⚠️</div><div>UhOh</div></button>
+      <button class="btn" onclick="cmd('tada')"><div class="emo-ico">✨</div><div>Tada</div></button>
       <button class="btn" onclick="cmd('clock')"><div class="emo-ico">🕒</div><div>Clock</div></button>
       <button class="btn" onclick="cmd('weather')"><div class="emo-ico">🌤️</div><div>Weather</div></button>
       <button class="btn" onclick="cmd('study')"><div class="emo-ico">👓</div><div>Study</div></button>
@@ -162,7 +180,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--a)}
     </div>
   </div>
   <div class="card">
-    <div class="label">MINI-GAMES</div>
+    <div class="label">MINI-GAMES & SPECIAL MODES</div>
     <div class="g3" style="margin-top:6px">
       <button class="btn p" onclick="cmd('flap_start')"><div class="emo-ico">🐤</div><div>Flappy</div></button>
       <button class="btn" onclick="cmd('flap_jump')"><div class="emo-ico">⬆️</div><div>Jump</div></button>
@@ -173,12 +191,17 @@ input:focus,textarea:focus,select:focus{border-color:var(--a)}
     </div>
   </div>
   <div class="card">
-    <div class="label" style="display:flex;justify-content:space-between"><span>HEAD SERVO</span><span id="srv-lbl">90°</span></div>
+    <div class="label" style="display:flex;justify-content:space-between"><span>HEAD SERVO MOTION</span><span id="srv-lbl">90°</span></div>
     <input type="range" min="40" max="140" value="90" class="slider" id="srv-sl" oninput="steer(this.value)">
     <div class="g3" style="margin-top:4px">
       <button class="btn" onclick="steer(60)">◀ Left</button>
       <button class="btn" onclick="steer(90)">Center</button>
       <button class="btn" onclick="steer(120)">Right ▶</button>
+    </div>
+    <div class="g3" style="margin-top:6px">
+      <button class="btn" onclick="cmd('nod')">Nod</button>
+      <button class="btn" onclick="cmd('shake')">Shake</button>
+      <button class="btn" onclick="cmd('wiggle')">Wiggle</button>
     </div>
   </div>
   <div class="card">
@@ -193,13 +216,17 @@ input:focus,textarea:focus,select:focus{border-color:var(--a)}
 <!-- SETTINGS TAB -->
 <div class="pane" id="p3">
   <div class="card">
-    <div class="label">OWNER PROFILE</div>
-    <div style="font-size:12px;color:#888;margin:6px 0">Name: <span id="own-name-lbl" style="color:#eee">--</span></div>
-    <button class="btn" onclick="resetOwner()" style="font-size:11px;padding:6px 12px;margin-top:4px">Reset Profile (clear memory)</button>
+    <div class="label">OWNER PROFILE & MEMORY</div>
+    <div style="font-size:12px;color:#888;margin:6px 0">Current Owner: <span id="own-name-lbl" style="color:var(--a);font-weight:700">--</span></div>
+    <div class="row" style="margin-bottom:8px">
+      <input type="text" id="name-inp" placeholder="Update your name...">
+      <button class="btn p" onclick="saveName()" style="padding:9px 14px">Save</button>
+    </div>
+    <button class="btn" onclick="resetOwner()" style="font-size:11px;padding:6px 12px;width:100%">🗑️ Reset Profile & Clear Memory</button>
   </div>
   <div class="card">
     <div class="label">GEMINI API KEYS <span id="key-badge" style="color:#888;font-size:11px">(0 active)</span></div>
-    <textarea id="key-inp" rows="3" placeholder="AIzaSy...&#10;AIzaSy... (one per line)" style="margin-top:6px"></textarea>
+    <textarea id="key-inp" rows="3" placeholder="AIzaSy...&#10;AIzaSy... (one per line or comma-separated)" style="margin-top:6px"></textarea>
     <button class="btn p" onclick="saveKeys()" style="width:100%;margin-top:8px">Save Key Pool</button>
   </div>
   <div class="card">
@@ -232,7 +259,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--a)}
     <div class="label">WIFI ROUTER</div>
     <button class="btn" onclick="scanWifi()" style="width:100%;margin-bottom:8px">🔍 Scan Networks</button>
     <select id="wifi-sel" style="margin-bottom:8px"><option value="">-- Scan first --</option></select>
-    <input type="text" id="wifi-pass" placeholder="WiFi Password" style="margin-bottom:8px">
+    <input type="password" id="wifi-pass" placeholder="WiFi Password" style="margin-bottom:8px">
     <button class="btn p" onclick="saveWifi()" style="width:100%">Connect & Save</button>
   </div>
 </div>
@@ -310,6 +337,21 @@ function toggleMic(){
   recog.start();
 }
 
+function submitOnboarding(){
+  const n=document.getElementById('onboard-inp').value.trim();
+  if(!n){alert('Please enter your name!');return;}
+  fetch('/api/owner/name',{method:'POST',body:n}).then(()=>{
+    document.getElementById('onboarding-box').style.display='none';
+    alert('Nice to meet you, '+n+'!');
+  });
+}
+
+function saveName(){
+  const n=document.getElementById('name-inp').value.trim();
+  if(!n){alert('Please enter your name!');return;}
+  fetch('/api/owner/name',{method:'POST',body:n}).then(()=>alert('Owner name updated!'));
+}
+
 function scanWifi(){
   const sel=document.getElementById('wifi-sel');
   sel.innerHTML='<option>Scanning...</option>';
@@ -350,6 +392,12 @@ function resetOwner(){
 
 function poll(){
   fetch('/api/status').then(r=>r.json()).then(d=>{
+    // Onboarding box
+    if(!d.onboarding_done && (!d.owner_name || d.owner_name==='Friend')){
+      document.getElementById('onboarding-box').style.display='block';
+    } else {
+      document.getElementById('onboarding-box').style.display='none';
+    }
     // Vitals
     ['aff','eng','hng'].forEach((k,i)=>{
       const vals=[d.affection,d.energy,d.hunger];

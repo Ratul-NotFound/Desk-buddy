@@ -80,7 +80,7 @@ void AudioEngine::_audioTask(void* param) {
 }
 
 void AudioEngine::_playHDInternal(const uint8_t* data, int len, int vol) {
-    micMuteUntil = millis() + (len / VOICE_SAMPLE_RATE * 1000) + 1500;
+    micMuteUntil = millis() + (((unsigned long)len * 1000UL) / VOICE_SAMPLE_RATE) + 1500UL;
     if (vol == 0) { delay(300); return; }
     int delayUs = 1000000 / VOICE_SAMPLE_RATE;
     for (int i = 0; i < len; i++) {
@@ -89,6 +89,7 @@ void AudioEngine::_playHDInternal(const uint8_t* data, int len, int vol) {
         int scaled = (centered * vol) / 100;
         dacWrite(AUDIO_DAC_PIN, (uint8_t)constrain(scaled + 128, 0, 255));
         delayMicroseconds(delayUs);
+        if ((i & 0xFF) == 0) taskYIELD();
     }
     for (int fade = 128; fade >= 0; fade -= 8) {
         dacWrite(AUDIO_DAC_PIN, (uint8_t)((fade * vol) / 100));
@@ -98,7 +99,7 @@ void AudioEngine::_playHDInternal(const uint8_t* data, int len, int vol) {
 }
 
 void AudioEngine::_playChirpInternal(int sf, int ef, int dur, int vol) {
-    micMuteUntil = millis() + dur + 1000;
+    micMuteUntil = millis() + dur + 1000UL;
     if (vol == 0) { delay(dur); return; }
     int steps = dur * 5;
     for (int i = 0; i < steps; i++) {
@@ -109,13 +110,14 @@ void AudioEngine::_playChirpInternal(int sf, int ef, int dur, int vol) {
         uint8_t lo = (uint8_t)constrain(128 - (vol * 50) / 100, 0, 255);
         dacWrite(AUDIO_DAC_PIN, hi); delayMicroseconds(half);
         dacWrite(AUDIO_DAC_PIN, lo); delayMicroseconds(half);
+        if ((i & 0x7F) == 0) taskYIELD();
     }
     dacWrite(AUDIO_DAC_PIN, 0);
 }
 
 void AudioEngine::_playPhonemesInternal(int words, const char* sub, int vol) {
     int syllables = constrain(words * 2, 4, 16);
-    micMuteUntil = millis() + (syllables * 120) + 1500;
+    micMuteUntil = millis() + (syllables * 120UL) + 1500UL;
     if (vol == 0) { delay(syllables * 120); return; }
     for (int s = 0; s < syllables; s++) {
         currentMouthShape = s % 4;
@@ -133,6 +135,7 @@ void AudioEngine::_playPhonemesInternal(int words, const char* sub, int vol) {
             dacWrite(AUDIO_DAC_PIN, lo); delayMicroseconds(half);
         }
         dacWrite(AUDIO_DAC_PIN, 0);
+        taskYIELD();
         delay(random(15, 35));
     }
     currentMouthShape = -1;
