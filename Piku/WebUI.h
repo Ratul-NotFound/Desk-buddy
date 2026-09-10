@@ -288,10 +288,18 @@ function speakBrowser(t){
   if(!('speechSynthesis' in window)) return;
   if(!document.getElementById('tts-tog').checked) return;
   speechSynthesis.cancel();
-  const u=new SpeechSynthesisUtterance(t.replace(/\[[A-Z:0-9]+\]/g,'').trim());
-  u.rate=1.05;u.pitch=1.3;
+  let clean = t.replace(/\[[A-Za-z0-9_:]+\]/g,'').replace(/\[REMEMBER:.*?\]/g,'').trim();
+  if(!clean) return;
+  const u=new SpeechSynthesisUtterance(clean);
+  u.lang='en-US';
+  u.rate=1.02;
+  u.pitch=1.25;
+  const voices=speechSynthesis.getVoices();
+  const v=voices.find(x=>x.lang.startsWith('en')&&(x.name.includes('Natural')||x.name.includes('Female')||x.name.includes('Google')||x.name.includes('Zira')||x.name.includes('Samantha')));
+  if(v) u.voice=v;
   speechSynthesis.speak(u);
 }
+if('speechSynthesis' in window){speechSynthesis.onvoiceschanged=()=>speechSynthesis.getVoices();}
 
 function addChat(text,type){
   const c=document.getElementById('clog');

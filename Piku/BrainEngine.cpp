@@ -2,9 +2,10 @@
 #include "secrets.h"
 #include "voice_samples.h"
 
-void BrainEngine::init(SoulEngine* soul, AudioEngine* audio) {
+void BrainEngine::init(SoulEngine* soul, AudioEngine* audio, DisplayEngine* disp) {
     _soul  = soul;
     _audio = audio;
+    _disp  = disp;
     memset(_knownFacts, 0, sizeof(_knownFacts));
     _loadProfile();
     _initKeyPool();
@@ -13,7 +14,7 @@ void BrainEngine::init(SoulEngine* soul, AudioEngine* audio) {
 void BrainEngine::update() {
     if (!_soul->hasPendingAIRequest()) return;
     String topic = _soul->consumeAIRequest();
-    askGemini(topic);   // autonomous call
+    askGemini(topic);   // autonomous spontaneous call
 }
 
 void BrainEngine::_loadProfile() {
@@ -88,7 +89,7 @@ void BrainEngine::_initKeyPool() {
             if (!exists) _keyPool.push_back(dk);
         }
     }
-    Serial.printf("[Brain] Loaded %d Gemini keys\n", (int)_keyPool.size());
+    Serial.printf("[Brain] Loaded %d Gemini keys in failover pool\n", (int)_keyPool.size());
 }
 
 void BrainEngine::_pushContext(const String& user, const String& piku) {
@@ -110,7 +111,7 @@ String BrainEngine::_buildPrompt(const String& userMessage, bool isAutonomous) {
     p += "Time: " + currentTime + ". Date: " + currentDate + ". Weather: " + String(currentTempC) + "C " + currentWeather + ".\n";
     p += F("Rules:\n");
     p += F("1. Start with EXACTLY ONE tag: [HAPPY:n], [LOVE:n], [CURIOUS:n], [PARTY:n], [CAT:n], [COOL:n], [HACKER:n], [KISS:n], [ANGER:n], [SLEEPY:n], [SAD:n] — n=0-100 intensity.\n");
-    p += F("2. Max 18 words after the tag. Natural, alive, punchy.\n");
+    p += F("2. Max 18 words after the tag. Natural, alive, punchy, conversational.\n");
     p += F("3. If you learn something important about the owner, append [REMEMBER: one sentence fact].\n");
     if (_contextCount > 0) {
         p += F("Recent dialogue:\n");
@@ -142,10 +143,12 @@ String BrainEngine::askGemini(const String& userPrompt) {
     if (_keyPool.empty()) {
         _soul->triggerEmotion(EMOTION_UHOH_ALERT, 70, 3000);
         _audio->playHD(voice_uhoh_data, sizeof(voice_uhoh_data), 0, "No API key!");
+        _disp->setSubtitle("Please add API key in Settings!", 4000);
         return "Please add a Gemini API key in Settings!";
     }
     if (WiFi.status() != WL_CONNECTED) {
         _soul->triggerEmotion(EMOTION_UHOH_ALERT, 60, 3000);
+        _disp->setSubtitle("No WiFi! Connect Piku to router.", 4000);
         return "No internet — connect Piku to WiFi first!";
     }
 
@@ -155,19 +158,20 @@ String BrainEngine::askGemini(const String& userPrompt) {
                    userPrompt.indexOf("Share ") == 0);
 
     _soul->setAIThinking(true);
+    _disp->setSubtitle("Thinking...", 5000);
 
     String prompt = _buildPrompt(userPrompt, isAuto);
     prompt.replace("\"", "\\\"");
     prompt.replace("\n", "\\n");
     prompt.replace("\r", "");
 
-    String payload = "{\"contents\":[{\"parts\":[{\"text\":\"" + prompt + "\"}]}]}";
+    String payload = "{\"contents\":[{\"parts\":[{\"text\":\"" + prompt + "\"}]}],\"generationConfig\":{\"maxOutputTokens\":120,\"temperature\":0.7}}";
 
     const char* endpoints[] = {
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=",
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=",
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=",
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key="
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=",
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key="
     };
 
     String aiText;
@@ -179,7 +183,7 @@ String BrainEngine::askGemini(const String& userPrompt) {
         for (int m = 0; m < 4 && aiText.length() == 0; m++) {
             WiFiClientSecure client;
             client.setInsecure();
-            client.setTimeout(8000);
+            client.setTimeout(9000);
             HTTPClient https;
             String url = String(endpoints[m]) + key;
             if (https.begin(client, url)) {
@@ -200,8 +204,11 @@ String BrainEngine::askGemini(const String& userPrompt) {
                         aiText = sub.substring(0, end);
                         aiText.replace("\\n", " ");
                         aiText.replace("\\\"", "\"");
+                        aiText.replace("\\t", " ");
+                        aiText.trim();
                     }
                 } else if (code == 429 || code == 403 || code == 503) {
+                    Serial.printf("[Brain] Key %d error code %d, trying next...\n", _activeKey+1, code);
                     _activeKey = (_activeKey + 1) % totalKeys;
                 }
                 https.end();
@@ -215,6 +222,7 @@ String BrainEngine::askGemini(const String& userPrompt) {
     if (aiText.length() == 0) {
         _soul->triggerEmotion(EMOTION_UHOH_ALERT, 60, 3000);
         _audio->playHD(voice_uhoh_data, sizeof(voice_uhoh_data), 0, "Keys busy...");
+        _disp->setSubtitle("Gemini busy, try again soon!", 4000);
         return "All Gemini keys are rate-limited. Try again soon!";
     }
 
@@ -226,7 +234,7 @@ String BrainEngine::askGemini(const String& userPrompt) {
 void BrainEngine::_parseAndAct(const String& aiText, const String& userMessage, bool isAuto) {
     // Parse emotion tag + intensity: [EMOTION:n]
     RobotEmotion emotion = EMOTION_HELLO;
-    int intensity = 65;
+    int intensity = 70;
 
     struct { const char* tag; RobotEmotion e; } tagMap[] = {
         {"[HAPPY", EMOTION_HELLO}, {"[LOVE", EMOTION_LOVE}, {"[CURIOUS", EMOTION_CURIOUS_SCAN},
@@ -275,49 +283,20 @@ void BrainEngine::_parseAndAct(const String& aiText, const String& userMessage, 
     int words = 1;
     for (int i = 0; i < (int)cleanText.length(); i++) if (cleanText[i] == ' ') words++;
 
-    // Update context
+    // Update dialogue context
     _pushContext(isAuto ? "(spontaneous)" : userMessage, cleanText);
 
-    // Tell SoulEngine
+    // Set subtitle on DisplayEngine so the owner sees what Piku is saying
+    _disp->setSubtitle(cleanText, max(5000, words * 400));
+
+    // Update SoulEngine with emotion and intensity
     _soul->onAIResponseReceived(emotion, intensity, cleanText);
 
-    // Dispatch matching emotional HD voice or signature chirp
-    switch (emotion) {
-        case EMOTION_LOVE:
-            _audio->playHD(voice_love_data, sizeof(voice_love_data), 3, cleanText.c_str());
-            break;
-        case EMOTION_PARTY_DJ:
-            _audio->playHD(voice_party_data, sizeof(voice_party_data), 1, cleanText.c_str());
-            break;
-        case EMOTION_KAWAII_CAT:
-            _audio->playHD(voice_cat_data, sizeof(voice_cat_data), 4, cleanText.c_str());
-            break;
-        case EMOTION_KAWAII_KISS:
-            _audio->playHD(voice_kiss_data, sizeof(voice_kiss_data), 4, cleanText.c_str());
-            break;
-        case EMOTION_FIRE_RAGE:
-            _audio->playHD(voice_fire_data, sizeof(voice_fire_data), 3, cleanText.c_str());
-            break;
-        case EMOTION_MATRIX_HACKER:
-            _audio->playHD(voice_hacker_data, sizeof(voice_hacker_data), 2, cleanText.c_str());
-            break;
-        case EMOTION_RAINY_SAD:
-            _audio->playHD(voice_sad_data, sizeof(voice_sad_data), 0, cleanText.c_str());
-            break;
-        case EMOTION_COOL_SUNGLASSES:
-        case EMOTION_TADA:
-            _audio->playHD(voice_tada_data, sizeof(voice_tada_data), 3, cleanText.c_str());
-            break;
-        case EMOTION_SLEEP:
-            _audio->playHD(voice_sleep_data, sizeof(voice_sleep_data), 0, cleanText.c_str());
-            break;
-        case EMOTION_HELLO:
-        default:
-            if (intensity >= 70) {
-                _audio->playHD(voice_hello_data, sizeof(voice_hello_data), 2, cleanText.c_str());
-            } else {
-                _audio->playPhonemes(words, cleanText.c_str());
-            }
-            break;
+    // Speak phonetically while animating mouth shapes
+    _audio->playPhonemes(words, cleanText.c_str());
+
+    // If message is longer than screen width, trigger smooth marquee scroll
+    if (cleanText.length() > 20) {
+        _disp->startScrollMessage(cleanText, "PIKU AI");
     }
 }

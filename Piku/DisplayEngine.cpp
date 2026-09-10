@@ -30,6 +30,11 @@ void DisplayEngine::setClockWeather(const String& timeStr, const String& dateStr
     _weatherCond = cond;
 }
 
+void DisplayEngine::setSubtitle(const String& sub, int holdDurationMs) {
+    _activeSubtitle = sub;
+    _subtitleExpiry = millis() + holdDurationMs;
+}
+
 void DisplayEngine::morphToEmotion(RobotEmotion e, int durationMs) {
     if (_currentEmotion == e) return;
     _currentEmotion = e;
@@ -125,10 +130,12 @@ void DisplayEngine::update(AudioEngine* audio) {
         return;
     }
 
-    // Check for active vocal lip sync
+    // Check for active vocal lip sync or speech display
     int mouth = audio ? audio->currentMouthShape : -1;
+    const char* subPtr = (_activeSubtitle.length() > 0 && now < _subtitleExpiry) ? _activeSubtitle.c_str() : nullptr;
+
     if (mouth >= 0) {
-        renderSpeechFace(mouth, nullptr);
+        renderSpeechFace(mouth, subPtr);
         _disp.display();
         return;
     }
@@ -160,6 +167,13 @@ void DisplayEngine::update(AudioEngine* audio) {
         case EMOTION_IDLE:
         default:
             renderLivingIdleFace(_gazeX, _gazeY, openRatio);
+            if (subPtr) {
+                _disp.setTextSize(1); _disp.setTextColor(SSD1306_WHITE);
+                int len = strlen(subPtr);
+                int sx  = (128 - len * 6) / 2;
+                _disp.setCursor(max(2, sx), 56);
+                _disp.print(subPtr);
+            }
             break;
     }
 

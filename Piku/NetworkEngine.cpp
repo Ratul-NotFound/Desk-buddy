@@ -2,8 +2,10 @@
 
 void NetworkEngine::init(const char* apSsid, const char* apPass, const char* mdnsName) {
     WiFi.mode(WIFI_AP_STA);
+    WiFi.setAutoReconnect(true);
+    WiFi.persistent(true);
     WiFi.softAP(apSsid, apPass);
-    Serial.printf("[WiFi] AP: %s  IP: %s\n", apSsid, WiFi.softAPIP().toString().c_str());
+    Serial.printf("[WiFi] AP Started: %s  IP: %s\n", apSsid, WiFi.softAPIP().toString().c_str());
     if (MDNS.begin(mdnsName)) {
         Serial.printf("[mDNS] http://%s.local\n", mdnsName);
     }
@@ -11,7 +13,10 @@ void NetworkEngine::init(const char* apSsid, const char* apPass, const char* mdn
 
 void NetworkEngine::connectStation(const String& ssid, const String& pass, int gmtOffsetHours) {
     _gmtOffset = gmtOffsetHours;
+    WiFi.disconnect(false);
+    delay(100);
     WiFi.begin(ssid.c_str(), pass.c_str());
+    Serial.printf("[WiFi] Connecting to station: %s...\n", ssid.c_str());
 }
 
 void NetworkEngine::saveStaCreds(const String& ssid, const String& pass) {
@@ -24,8 +29,9 @@ void NetworkEngine::saveStaCreds(const String& ssid, const String& pass) {
 void NetworkEngine::syncNTP(int gmtOffsetHours) {
     _gmtOffset = gmtOffsetHours;
     configTime(gmtOffsetHours * 3600, 0, NTP_SERVER, "time.nist.gov", "time.google.com");
-    struct tm t; timeIsSynced = getLocalTime(&t);
-    if (timeIsSynced) Serial.println(F("[NTP] Time synced"));
+    struct tm t;
+    timeIsSynced = getLocalTime(&t, 5000);
+    if (timeIsSynced) Serial.println(F("[NTP] Time successfully synchronized"));
 }
 
 void NetworkEngine::fetchWeather(float lat, float lon, int* outTemp, int* outHumidity, String* outCondition) {
@@ -37,7 +43,7 @@ void NetworkEngine::fetchWeather(float lat, float lon, int* outTemp, int* outHum
     http.begin(url);
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
     http.setUserAgent("PikuDeskBuddy/2.0");
-    http.setTimeout(5000);
+    http.setTimeout(6000);
     int code = http.GET();
     if (code == 200) {
         String body = http.getString();
@@ -68,7 +74,9 @@ void NetworkEngine::fetchWeather(float lat, float lon, int* outTemp, int* outHum
             if (end != -1) *outHumidity = body.substring(start, end).toInt();
         }
         weatherIsSynced = true;
-        Serial.printf("[Weather] %d°C %s\n", *outTemp, outCondition->c_str());
+        Serial.printf("[Weather] %d°C %s, Hum: %d%%\n", *outTemp, outCondition->c_str(), *outHumidity);
+    } else {
+        Serial.printf("[Weather] HTTP Error: %d\n", code);
     }
     http.end();
 }
@@ -76,7 +84,7 @@ void NetworkEngine::fetchWeather(float lat, float lon, int* outTemp, int* outHum
 String NetworkEngine::getFormattedTime() {
     struct tm t;
     if (!getLocalTime(&t)) return "--:--";
-    char buf[10];
+    char buf[12];
     strftime(buf, sizeof(buf), "%I:%M %p", &t);
     return String(buf);
 }
@@ -84,7 +92,7 @@ String NetworkEngine::getFormattedTime() {
 String NetworkEngine::getFormattedDate() {
     struct tm t;
     if (!getLocalTime(&t)) return "---";
-    char buf[22];
+    char buf[24];
     strftime(buf, sizeof(buf), "%a, %d %b %Y", &t);
     return String(buf);
 }
@@ -97,5 +105,6 @@ String NetworkEngine::scanNetworks() {
         json += "{\"ssid\":\"" + WiFi.SSID(i) + "\",\"rssi\":" + String(WiFi.RSSI(i)) + "}";
     }
     json += "]";
+    WiFi.scanDelete();
     return json;
 }

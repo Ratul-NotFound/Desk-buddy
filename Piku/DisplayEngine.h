@@ -32,6 +32,7 @@ public:
     void setGaze(float gx, float gy) { _gazeX = gx; _gazeY = gy; }
     void triggerBlink();
     void update(AudioEngine* audio);
+    void setSubtitle(const String& sub, int holdDurationMs = 4000);
     void startScrollMessage(const String& text, const char* title = nullptr);
     void showVolumeHUD(int vol, bool muted);
     bool isScrolling() const { return _scrolling; }
@@ -83,6 +84,10 @@ private:
     bool  _blinking = false;
     float _blinkProg = 0;
     unsigned long _nextBlink = 0;
+
+    // Subtitle & Speech
+    String        _activeSubtitle;
+    unsigned long _subtitleExpiry = 0;
 
     // Scroll message
     bool   _scrolling   = false;

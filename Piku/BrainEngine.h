@@ -6,12 +6,13 @@
 #include <vector>
 #include "SoulEngine.h"
 #include "AudioEngine.h"
+#include "DisplayEngine.h"
 
 struct ContextTurn { String user, piku; };
 
 class BrainEngine {
 public:
-    void init(SoulEngine* soul, AudioEngine* audio);
+    void init(SoulEngine* soul, AudioEngine* audio, DisplayEngine* disp);
     void update();    // call from Core 0 task every loop
 
     // Gemini AI
@@ -37,9 +38,10 @@ public:
     String currentDate     = "Thu, 01 Jan";
 
 private:
-    SoulEngine*   _soul;
-    AudioEngine*  _audio;
-    Preferences   _prefs;
+    SoulEngine*    _soul;
+    AudioEngine*   _audio;
+    DisplayEngine* _disp;
+    Preferences    _prefs;
 
     String _ownerName      = "Friend";
     bool   _onboardingDone = false;

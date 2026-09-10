@@ -424,7 +424,7 @@ void setup() {
     disp.init();
     sensors.init(&audio);
     soul.init(&disp, &audio, &servo);
-    brain.init(&soul, &audio);
+    brain.init(&soul, &audio, &disp);
     soul.setAutoTalkInterval(autoTalkMin);
     sensors.setSoundEnabled(soundEnabled);
 

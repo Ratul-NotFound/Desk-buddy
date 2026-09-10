@@ -37,7 +37,7 @@ private:
     int  _volume = 80;
     bool _muted  = false;
 
-    void _playHDInternal(const uint8_t* data, int len, int vol);
+    void _playHDInternal(const uint8_t* data, int len, int vol, int mouthShape);
     void _playChirpInternal(int sf, int ef, int dur, int vol);
     void _playPhonemesInternal(int words, const char* sub, int vol);
 
