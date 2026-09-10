@@ -20,13 +20,15 @@ public:
     void triggerWiggle();
     void performGesture(GestureType g);
     void update();          // call every ~20ms from soul loop
+    bool isBusy() const { return _gestureActive; }
 
 private:
     Servo _servo;
     float _current   = SERVO_CENTER;
     float _target    = SERVO_CENTER;
-    bool  _wiggling  = false;
-    unsigned long _wiggleEnd  = 0;
-    int   _wigglePhase        = 0;
-    unsigned long _nextWiggle = 0;
+
+    bool          _gestureActive  = false;
+    GestureType   _currentGesture = GESTURE_NOD;
+    int           _gestureStep    = 0;
+    unsigned long _nextStepTime   = 0;
 };

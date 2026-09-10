@@ -13,52 +13,112 @@ void ServoEngine::init() {
 }
 
 void ServoEngine::setTarget(float angle) {
-    _target = constrain(angle, SERVO_MIN_ANGLE, SERVO_MAX_ANGLE);
+    if (!_gestureActive) {
+        _target = constrain(angle, SERVO_MIN_ANGLE, SERVO_MAX_ANGLE);
+    }
 }
 
 void ServoEngine::triggerWiggle() {
-    _wiggling   = true;
-    _wiggleEnd  = millis() + 800;
-    _wigglePhase = 0;
-    _nextWiggle = millis();
+    performGesture(GESTURE_WIGGLE);
 }
 
 void ServoEngine::performGesture(GestureType g) {
-    switch (g) {
-        case GESTURE_NOD:
-            setTarget(SERVO_CENTER - 15.0f);
-            break;
-        case GESTURE_SHAKE:
-            triggerWiggle();
-            break;
-        case GESTURE_TILT_LEFT:
-            setTarget(SERVO_CENTER - 20.0f);
-            break;
-        case GESTURE_TILT_RIGHT:
-            setTarget(SERVO_CENTER + 20.0f);
-            break;
-        case GESTURE_CURIOUS:
-            setTarget(SERVO_CENTER + 25.0f);
-            break;
-        case GESTURE_WIGGLE:
-            triggerWiggle();
-            break;
-    }
+    _currentGesture = g;
+    _gestureActive  = true;
+    _gestureStep    = 0;
+    _nextStepTime   = millis();
 }
 
 void ServoEngine::update() {
     unsigned long now = millis();
-    if (_wiggling) {
-        if (now >= _wiggleEnd) {
-            _wiggling = false;
-            _target = SERVO_CENTER;
-        } else if (now >= _nextWiggle) {
-            _nextWiggle = now + 120;
-            _wigglePhase = (_wigglePhase + 1) % 4;
-            float offsets[] = { 20.0f, -20.0f, 15.0f, -15.0f };
-            _target = SERVO_CENTER + offsets[_wigglePhase];
+
+    if (_gestureActive && now >= _nextStepTime) {
+        switch (_currentGesture) {
+            case GESTURE_NOD: {
+                // Multi-frame nod: down, up, down, center
+                float angles[] = { 72.0f, 104.0f, 75.0f, 90.0f };
+                int delays[]   = { 220,   220,    200,   200 };
+                if (_gestureStep < 4) {
+                    _target = angles[_gestureStep];
+                    _nextStepTime = now + delays[_gestureStep];
+                    _gestureStep++;
+                } else {
+                    _gestureActive = false;
+                    _target = SERVO_CENTER;
+                }
+                break;
+            }
+            case GESTURE_SHAKE: {
+                // Multi-frame head shake: left, right, left, right, center
+                float angles[] = { 112.0f, 68.0f, 108.0f, 72.0f, 90.0f };
+                int delays[]   = { 180,    180,   160,    160,   200 };
+                if (_gestureStep < 5) {
+                    _target = angles[_gestureStep];
+                    _nextStepTime = now + delays[_gestureStep];
+                    _gestureStep++;
+                } else {
+                    _gestureActive = false;
+                    _target = SERVO_CENTER;
+                }
+                break;
+            }
+            case GESTURE_TILT_LEFT: {
+                float angles[] = { 68.0f, 90.0f };
+                int delays[]   = { 1200,  300 };
+                if (_gestureStep < 2) {
+                    _target = angles[_gestureStep];
+                    _nextStepTime = now + delays[_gestureStep];
+                    _gestureStep++;
+                } else {
+                    _gestureActive = false;
+                    _target = SERVO_CENTER;
+                }
+                break;
+            }
+            case GESTURE_TILT_RIGHT: {
+                float angles[] = { 112.0f, 90.0f };
+                int delays[]   = { 1200,   300 };
+                if (_gestureStep < 2) {
+                    _target = angles[_gestureStep];
+                    _nextStepTime = now + delays[_gestureStep];
+                    _gestureStep++;
+                } else {
+                    _gestureActive = false;
+                    _target = SERVO_CENTER;
+                }
+                break;
+            }
+            case GESTURE_CURIOUS: {
+                // Curious tilt with slight overshoot and hold
+                float angles[] = { 116.0f, 110.0f, 90.0f };
+                int delays[]   = { 300,    1400,   350 };
+                if (_gestureStep < 3) {
+                    _target = angles[_gestureStep];
+                    _nextStepTime = now + delays[_gestureStep];
+                    _gestureStep++;
+                } else {
+                    _gestureActive = false;
+                    _target = SERVO_CENTER;
+                }
+                break;
+            }
+            case GESTURE_WIGGLE: {
+                // High-energy dance wiggle
+                float angles[] = { 115.0f, 65.0f, 112.0f, 68.0f, 105.0f, 75.0f, 90.0f };
+                int delays[]   = { 130,    130,   120,    120,   110,    110,   200 };
+                if (_gestureStep < 7) {
+                    _target = angles[_gestureStep];
+                    _nextStepTime = now + delays[_gestureStep];
+                    _gestureStep++;
+                } else {
+                    _gestureActive = false;
+                    _target = SERVO_CENTER;
+                }
+                break;
+            }
         }
     }
+
     _current += (_target - _current) * SERVO_EASING;
     int angle = constrain((int)_current, (int)SERVO_MIN_ANGLE, (int)SERVO_MAX_ANGLE);
     _servo.write(angle);

@@ -68,11 +68,13 @@ private:
 
     // Clap cooldown
     unsigned long _clapCoolUntil = 0;
+    unsigned long _nextQuirk     = 0;
 
     void _triggerVoiceForEmotion(RobotEmotion e);
     void _doMetabolismTick();
     void _doGazeUpdate();
     void _doAutoTalkCheck();
+    void _doRandomQuirks();
     void _doEmotionResetCheck();
 
     static const char* _pickRandomTopic();
