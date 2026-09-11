@@ -4,27 +4,37 @@
 #include <ESPmDNS.h>
 #include <HTTPClient.h>
 #include <Preferences.h>
-#include <time.h>
 #include "config.h"
 
 class NetworkEngine {
 public:
-    void   init(const char* apSsid, const char* apPass, const char* mdnsName);
-    void   connectStation(const String& ssid, const String& pass, int gmtOffsetHours);
-    bool   isStaConnected() const { return WiFi.status() == WL_CONNECTED; }
-    String getStaIP()       const { return WiFi.localIP().toString(); }
-    String getApIP()        const { return WiFi.softAPIP().toString(); }
-    void   saveStaCreds(const String& ssid, const String& pass);
+    bool timeIsSynced    = false;
+    bool weatherIsSynced = false;
 
+    void   init(const char* apSsid, const char* apPass, const char* mdnsName);
+    void   update();    // call from networkTask every loop — handles reconnect watchdog
+
+    void   connectStation(const String& ssid, const String& pass, int gmtOffsetHours);
+    void   saveStaCreds(const String& ssid, const String& pass);
     void   syncNTP(int gmtOffsetHours);
-    void   fetchWeather(float lat, float lon, int* outTemp, int* outHumidity, String* outCondition);
+    bool   fetchWeather(float lat, float lon, int* outTemp, int* outHumidity, String* outCondition);
+
+    // Returns TRUE exactly once when STA first connects (edge detect)
+    bool   justConnected();
+
+    bool   isStaConnected();
+    String getStaIP();
+    String getApIP();
     String getFormattedTime();
     String getFormattedDate();
     String scanNetworks();
 
-    bool   timeIsSynced    = false;
-    bool   weatherIsSynced = false;
-
 private:
-    int _gmtOffset = DEFAULT_GMT_OFFSET;
+    String _staSSID, _staPass;
+    int    _gmtOffset = 6;
+
+    bool          _wasConnected      = false;
+    bool          _reportedConnected = false;
+    int           _failCount         = 0;
+    unsigned long _reconnectAt       = 0;
 };

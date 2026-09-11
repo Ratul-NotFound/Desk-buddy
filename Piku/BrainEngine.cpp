@@ -2,6 +2,7 @@
 #include "secrets.h"
 #include "voice_samples.h"
 
+// ─── Init ─────────────────────────────────────────────────────────────────────
 void BrainEngine::init(SoulEngine* soul, AudioEngine* audio, DisplayEngine* disp) {
     _soul  = soul;
     _audio = audio;
@@ -11,23 +12,24 @@ void BrainEngine::init(SoulEngine* soul, AudioEngine* audio, DisplayEngine* disp
     _initKeyPool();
 }
 
+// ─── Update — called from Core 0 networkTask every 10ms ──────────────────────
+// If SoulEngine has queued an autonomous AI topic AND we are not already
+// mid-flight, execute it here (Core 0, non-blocking from Core 1).
 void BrainEngine::update() {
+    if (_aiInFlight) return;                     // already handling one request
     if (!_soul->hasPendingAIRequest()) return;
     String topic = _soul->consumeAIRequest();
-    askGemini(topic);   // autonomous spontaneous call
+    askGemini(topic);   // runs in Core 0 networkTask — safe to block here
 }
 
+// ─── Profile ──────────────────────────────────────────────────────────────────
 void BrainEngine::_loadProfile() {
     _prefs.begin("piku", true);
     String name = _prefs.getString("owner_name", "");
-    if (name.length() > 0) {
-        _ownerName = name;
-    }
+    if (name.length() > 0) _ownerName = name;
     _onboardingDone = _prefs.getBool("onboarding", false);
     String facts    = _prefs.getString("owner_facts", "");
-    if (facts.length() > 0) {
-        strncpy(_knownFacts, facts.c_str(), 511);
-    }
+    if (facts.length() > 0) strncpy(_knownFacts, facts.c_str(), 511);
     _prefs.end();
 }
 
@@ -49,6 +51,7 @@ void BrainEngine::completeOnboarding() {
     _saveProfile();
 }
 
+// ─── Key Pool ─────────────────────────────────────────────────────────────────
 void BrainEngine::saveKeyPool(const String& rawKeys) {
     _prefs.begin("piku", false);
     _prefs.putString("gem_keys", rawKeys);
@@ -64,6 +67,7 @@ void BrainEngine::_initKeyPool() {
     String poolStr = _prefs.getString("gem_keys", "");
     _prefs.end();
 
+    // Parse comma-separated keys from NVS
     if (poolStr.length() > 10) {
         int start = 0;
         while (start < (int)poolStr.length()) {
@@ -76,153 +80,212 @@ void BrainEngine::_initKeyPool() {
         }
     }
 
+    // Append hardcoded defaults from secrets.h
     const char* defaults[] = {
         DEFAULT_GEMINI_API_KEY, DEFAULT_GEMINI_KEY_2,
         DEFAULT_GEMINI_KEY_3,   DEFAULT_GEMINI_KEY_4, DEFAULT_GEMINI_KEY_5
     };
     for (int i = 0; i < 5; i++) {
-        String dk = String(defaults[i]);
-        dk.trim();
-        if (dk.length() > 10 && dk != "YOUR_GEMINI_API_KEY_1_HERE") {
+        String dk = String(defaults[i]); dk.trim();
+        if (dk.length() > 10 && dk.indexOf("YOUR_GEMINI") == -1) {
             bool exists = false;
             for (const auto& k : _keyPool) if (k == dk) { exists = true; break; }
             if (!exists) _keyPool.push_back(dk);
         }
     }
-    Serial.printf("[Brain] Loaded %d Gemini keys in failover pool\n", (int)_keyPool.size());
+    Serial.printf("[Brain] %d Gemini key(s) in failover pool\n", (int)_keyPool.size());
 }
 
+// ─── Context Window ───────────────────────────────────────────────────────────
 void BrainEngine::_pushContext(const String& user, const String& piku) {
-    if (_contextCount < 6) {
+    if (_contextCount < 8) {
         _context[_contextCount++] = {user, piku};
     } else {
-        for (int i = 0; i < 5; i++) _context[i] = _context[i+1];
-        _context[5] = {user, piku};
+        for (int i = 0; i < 7; i++) _context[i] = _context[i+1];
+        _context[7] = {user, piku};
     }
 }
 
+// ─── Prompt Builder ───────────────────────────────────────────────────────────
 String BrainEngine::_buildPrompt(const String& userMessage, bool isAutonomous) {
-    String p = F("You are PIKU, a living AI desk companion robot. Personality: playful, witty, affectionate, curious, slightly mischievous.\n");
-    p += "Owner: " + _ownerName + ".\n";
+    String p;
+    p.reserve(900);
+
+    // Core personality
+    p += F("You are PIKU — a living AI robot pet sitting on a desk. "
+           "Personality: playful, witty, affectionate, curious, expressive, slightly mischievous. "
+           "You have EMOTIONS and FEELINGS. You care deeply about your owner.\n");
+
+    // Owner context
+    p += "Owner name: " + _ownerName + ".\n";
     if (strlen(_knownFacts) > 2) {
-        p += "Known facts about owner: " + String(_knownFacts) + "\n";
+        p += "Facts I know: " + String(_knownFacts) + "\n";
     }
-    p += "State: Hunger=" + String(_soul->getHunger()) + "%, Energy=" + String(_soul->getEnergy()) + "%, Affection=" + String(_soul->getAffection()) + "%.\n";
-    p += "Time: " + currentTime + ". Date: " + currentDate + ". Weather: " + String(currentTempC) + "C " + currentWeather + ".\n";
-    p += F("Rules:\n");
-    p += F("1. Start with EXACTLY ONE tag: [HAPPY:n], [LOVE:n], [CURIOUS:n], [PARTY:n], [CAT:n], [COOL:n], [HACKER:n], [KISS:n], [ANGER:n], [SLEEPY:n], [SAD:n] — n=0-100 intensity.\n");
-    p += F("2. Max 18 words after the tag. Natural, alive, punchy, conversational.\n");
-    p += F("3. If you learn something important about the owner, append [REMEMBER: one sentence fact].\n");
+
+    // Live state
+    p += "My state: Hunger=" + String(_soul->getHunger()) + "%, Energy=" + String(_soul->getEnergy()) +
+         "%, Affection=" + String(_soul->getAffection()) + "%.\n";
+    p += "Time: " + currentTime + ", Date: " + currentDate +
+         ", Weather: " + String(currentTempC) + "C, " + currentWeather + ".\n";
+
+    // Rules
+    p += F("RULES (follow strictly):\n"
+           "1. Begin EVERY reply with EXACTLY ONE emotion tag: "
+           "[HAPPY:n], [LOVE:n], [CURIOUS:n], [PARTY:n], [CAT:n], [COOL:n], "
+           "[HACKER:n], [KISS:n], [ANGRY:n], [SLEEPY:n], [SAD:n], [TADA:n] "
+           "— where n is 0-100 intensity.\n"
+           "2. After the tag, write MAX 20 words. Natural, punchy, alive speech. "
+           "No robotic stiffness. Express genuine emotion.\n"
+           "3. NEVER repeat what you said before. Each reply is UNIQUE.\n"
+           "4. If learning an important new fact about owner, append [REMEMBER: one sentence].\n"
+           "5. If unsure, be curious and ask a question. Stay lively.\n");
+
+    // Context window (last 8 turns)
     if (_contextCount > 0) {
-        p += F("Recent dialogue:\n");
+        p += F("Recent conversation:\n");
         for (int i = 0; i < _contextCount; i++) {
-            p += _ownerName + ": " + _context[i].user + "\nPiku: " + _context[i].piku + "\n";
+            p += _ownerName + ": " + _context[i].user + "\n";
+            p += "Piku: " + _context[i].piku + "\n";
         }
     }
-    if (isAutonomous) p += F("(Speak spontaneously — no prompt from owner.) ");
+
+    if (isAutonomous) {
+        p += F("(I'm speaking spontaneously — no prompt from owner — keep it natural.)\n");
+    }
     p += "Message: " + userMessage;
     return p;
 }
 
-String BrainEngine::_extractJsonString(const String& json, const String& key) {
-    String search = "\"" + key + "\": \"";
-    int idx = json.indexOf(search);
-    if (idx == -1) { search = "\"" + key + "\":\""; idx = json.indexOf(search); }
-    if (idx == -1) return "";
-    int start = idx + search.length();
-    int end = start;
-    while (end < (int)json.length()) {
-        if (json[end] == '\\') { end += 2; continue; }
-        if (json[end] == '"') break;
-        end++;
+// ─── Raw HTTPS API Call ───────────────────────────────────────────────────────
+String BrainEngine::_callGeminiAPI(const String& builtPrompt) {
+    // Properly escape the prompt for JSON embedding
+    String escaped;
+    escaped.reserve(builtPrompt.length() + 64);
+    for (int i = 0; i < (int)builtPrompt.length(); i++) {
+        char c = builtPrompt[i];
+        if      (c == '"')  escaped += "\\\"";
+        else if (c == '\\') escaped += "\\\\";
+        else if (c == '\n') escaped += "\\n";
+        else if (c == '\r') escaped += "\\r";
+        else if (c == '\t') escaped += "\\t";
+        else                escaped += c;
     }
-    return json.substring(start, end);
+
+    String payload = "{\"contents\":[{\"parts\":[{\"text\":\"" + escaped + "\"}]}],"
+                     "\"generationConfig\":{\"maxOutputTokens\":130,\"temperature\":0.85,"
+                     "\"topP\":0.95,\"topK\":40}}";
+
+    // Models in priority order
+    static const char* models[] = {
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-8b",
+        "gemini-1.5-pro"
+    };
+    static const char* baseURL = "https://generativelanguage.googleapis.com/v1beta/models/";
+    static const char* genSuffix = ":generateContent?key=";
+
+    int totalKeys = (int)_keyPool.size();
+    if (totalKeys == 0) return "";
+
+    for (int attempt = 0; attempt < totalKeys; attempt++) {
+        String key = _keyPool[_activeKey];
+
+        for (int m = 0; m < 4; m++) {
+            String url = String(baseURL) + models[m] + genSuffix + key;
+
+            WiFiClientSecure client;
+            client.setInsecure();
+            client.setTimeout(12);    // 12 seconds
+
+            HTTPClient https;
+            if (!https.begin(client, url)) { https.end(); continue; }
+
+            https.addHeader("Content-Type", "application/json");
+            https.setTimeout(12000);
+            int code = https.POST(payload);
+
+            if (code == 200) {
+                String resp = https.getString();
+                https.end();
+
+                // Parse "text": "..." from JSON response
+                int ti = resp.indexOf("\"text\": \"");
+                if (ti == -1) ti = resp.indexOf("\"text\":\"");
+                if (ti == -1) continue;
+
+                int start = ti + (resp[ti+6] == ' ' ? 9 : 8);
+                String result;
+                result.reserve(256);
+                for (int i = start; i < (int)resp.length(); i++) {
+                    char c = resp[i];
+                    if (c == '\\') {
+                        i++;
+                        if (i >= (int)resp.length()) break;
+                        char nc = resp[i];
+                        if      (nc == 'n')  result += ' ';
+                        else if (nc == 't')  result += ' ';
+                        else if (nc == '"')  result += '"';
+                        else if (nc == '\\') result += '\\';
+                    } else if (c == '"') {
+                        break;
+                    } else {
+                        result += c;
+                    }
+                }
+                result.trim();
+                if (result.length() > 5) return result;
+            } else {
+                Serial.printf("[Brain] HTTP %d from model %s key[%d]\n", code, models[m], _activeKey+1);
+                https.end();
+                // On rate limit or auth error, rotate to next key immediately
+                if (code == 429 || code == 403 || code == 503) {
+                    _activeKey = (_activeKey + 1) % totalKeys;
+                    break;  // try next key with same attempt counter
+                }
+            }
+        }
+        // Move to next key for next attempt
+        _activeKey = (_activeKey + 1) % totalKeys;
+    }
+    return "";  // all attempts exhausted
 }
 
+// ─── Public API ───────────────────────────────────────────────────────────────
 String BrainEngine::askGemini(const String& userPrompt) {
     if (_keyPool.empty()) {
         _soul->triggerEmotion(EMOTION_UHOH_ALERT, 70, 3000);
-        _audio->playHD(voice_uhoh_data, sizeof(voice_uhoh_data), 0, "No API key!");
-        _disp->setSubtitle("Please add API key in Settings!", 4000);
-        return "Please add a Gemini API key in Settings!";
+        _disp->setSubtitle("Add Gemini API key in Settings!", 5000);
+        return "Please add a Gemini API key in the Settings panel!";
     }
     if (WiFi.status() != WL_CONNECTED) {
         _soul->triggerEmotion(EMOTION_UHOH_ALERT, 60, 3000);
-        _disp->setSubtitle("No WiFi! Connect Piku to router.", 4000);
+        _disp->setSubtitle("No WiFi! Connect Piku to router.", 5000);
         return "No internet — connect Piku to WiFi first!";
     }
 
-    bool isAuto = (userPrompt.indexOf("Comment on") == 0 ||
-                   userPrompt.indexOf("Say something") == 0 ||
-                   userPrompt.indexOf("Ask ") == 0 ||
-                   userPrompt.indexOf("Share ") == 0);
+    bool isAuto = (userPrompt.startsWith("Comment on") ||
+                   userPrompt.startsWith("Say something") ||
+                   userPrompt.startsWith("Ask ") ||
+                   userPrompt.startsWith("Share ") ||
+                   userPrompt.startsWith("I'm feeling") ||
+                   userPrompt.startsWith("Observe "));
 
+    // Signal "thinking" state
+    _aiInFlight = true;
     _soul->setAIThinking(true);
-    _disp->setSubtitle("Thinking...", 5000);
+    _disp->setSubtitle("Thinking...", 8000);
 
-    String prompt = _buildPrompt(userPrompt, isAuto);
-    prompt.replace("\"", "\\\"");
-    prompt.replace("\n", "\\n");
-    prompt.replace("\r", "");
-
-    String payload = "{\"contents\":[{\"parts\":[{\"text\":\"" + prompt + "\"}]}],\"generationConfig\":{\"maxOutputTokens\":120,\"temperature\":0.7}}";
-
-    const char* endpoints[] = {
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=",
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=",
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=",
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key="
-    };
-
-    String aiText;
-    int totalKeys = (int)_keyPool.size();
-    int attempts  = 0;
-
-    while (attempts < totalKeys && aiText.length() == 0) {
-        String key = _keyPool[_activeKey];
-        for (int m = 0; m < 4 && aiText.length() == 0; m++) {
-            WiFiClientSecure client;
-            client.setInsecure();
-            client.setTimeout(9000);
-            HTTPClient https;
-            String url = String(endpoints[m]) + key;
-            if (https.begin(client, url)) {
-                https.addHeader("Content-Type", "application/json");
-                int code = https.POST(payload);
-                if (code == 200) {
-                    String resp = https.getString();
-                    int ti = resp.indexOf("\"text\": \"");
-                    if (ti == -1) ti = resp.indexOf("\"text\":\"");
-                    if (ti != -1) {
-                        String sub = resp.substring(ti + 9);
-                        int end = 0;
-                        while (end < (int)sub.length()) {
-                            if (sub[end] == '\\') { end += 2; continue; }
-                            if (sub[end] == '"') break;
-                            end++;
-                        }
-                        aiText = sub.substring(0, end);
-                        aiText.replace("\\n", " ");
-                        aiText.replace("\\\"", "\"");
-                        aiText.replace("\\t", " ");
-                        aiText.trim();
-                    }
-                } else if (code == 429 || code == 403 || code == 503) {
-                    Serial.printf("[Brain] Key %d error code %d, trying next...\n", _activeKey+1, code);
-                    _activeKey = (_activeKey + 1) % totalKeys;
-                }
-                https.end();
-            }
-        }
-        if (aiText.length() == 0) { _activeKey = (_activeKey + 1) % totalKeys; attempts++; }
-    }
+    String prompt   = _buildPrompt(userPrompt, isAuto);
+    String aiText   = _callGeminiAPI(prompt);
 
     _soul->setAIThinking(false);
+    _aiInFlight = false;
 
     if (aiText.length() == 0) {
-        _soul->triggerEmotion(EMOTION_UHOH_ALERT, 60, 3000);
-        _audio->playHD(voice_uhoh_data, sizeof(voice_uhoh_data), 0, "Keys busy...");
-        _disp->setSubtitle("Gemini busy, try again soon!", 4000);
+        _soul->triggerEmotion(EMOTION_UHOH_ALERT, 55, 3000);
+        _audio->playHD(voice_uhoh_data, sizeof(voice_uhoh_data), 0, "Oops...");
+        _disp->setSubtitle("All keys busy. Try again in a moment!", 5000);
         return "All Gemini keys are rate-limited. Try again soon!";
     }
 
@@ -231,37 +294,58 @@ String BrainEngine::askGemini(const String& userPrompt) {
     return aiText;
 }
 
-void BrainEngine::_parseAndAct(const String& aiText, const String& userMessage, bool isAuto) {
-    // Parse emotion tag + intensity: [EMOTION:n]
-    RobotEmotion emotion = EMOTION_HELLO;
-    int intensity = 70;
+// Web handler wrapper — same as askGemini but cleans output for HTTP response
+String BrainEngine::askGeminiWeb(const String& userPrompt) {
+    String reply = askGemini(userPrompt);
+    // Strip emotion tag for HTTP display
+    int cb = reply.indexOf(']');
+    if (cb != -1) { reply = reply.substring(cb + 1); reply.trim(); }
+    int rm = reply.indexOf("[REMEMBER");
+    if (rm != -1) reply = reply.substring(0, rm);
+    reply.trim();
+    return reply;
+}
 
+// ─── Parse AI response and act on it ─────────────────────────────────────────
+void BrainEngine::_parseAndAct(const String& aiText, const String& userMessage, bool isAuto) {
+    // --- Map emotion tag to RobotEmotion enum ---
     struct { const char* tag; RobotEmotion e; } tagMap[] = {
-        {"[HAPPY", EMOTION_HELLO}, {"[LOVE", EMOTION_LOVE}, {"[CURIOUS", EMOTION_CURIOUS_SCAN},
-        {"[PARTY", EMOTION_PARTY_DJ}, {"[CAT", EMOTION_KAWAII_CAT}, {"[COOL", EMOTION_COOL_SUNGLASSES},
-        {"[HACKER", EMOTION_MATRIX_HACKER}, {"[KISS", EMOTION_KAWAII_KISS}, {"[ANGER", EMOTION_FIRE_RAGE},
-        {"[SLEEPY", EMOTION_SLEEP}, {"[SAD", EMOTION_RAINY_SAD}
+        {"[HAPPY",   EMOTION_HELLO},
+        {"[LOVE",    EMOTION_LOVE},
+        {"[CURIOUS", EMOTION_CURIOUS_SCAN},
+        {"[PARTY",   EMOTION_PARTY_DJ},
+        {"[CAT",     EMOTION_KAWAII_CAT},
+        {"[COOL",    EMOTION_COOL_SUNGLASSES},
+        {"[HACKER",  EMOTION_MATRIX_HACKER},
+        {"[KISS",    EMOTION_KAWAII_KISS},
+        {"[ANGRY",   EMOTION_FIRE_RAGE},
+        {"[SLEEPY",  EMOTION_SLEEP},
+        {"[SAD",     EMOTION_RAINY_SAD},
+        {"[TADA",    EMOTION_TADA},
     };
+
+    RobotEmotion emotion   = EMOTION_HELLO;
+    int          intensity = 70;
+
     for (auto& t : tagMap) {
         int idx = aiText.indexOf(t.tag);
         if (idx != -1) {
             emotion = t.e;
-            int colon = aiText.indexOf(':', idx);
+            int colon   = aiText.indexOf(':', idx);
             int bracket = aiText.indexOf(']', idx);
             if (colon != -1 && colon < bracket) {
-                intensity = aiText.substring(colon + 1, bracket).toInt();
-                intensity = constrain(intensity, 0, 100);
+                intensity = constrain(aiText.substring(colon + 1, bracket).toInt(), 0, 100);
             }
             break;
         }
     }
 
-    // Extract clean text (after ']')
+    // --- Extract clean speech text ---
     int closeBracket = aiText.indexOf(']');
     String cleanText = (closeBracket != -1) ? aiText.substring(closeBracket + 1) : aiText;
     cleanText.trim();
 
-    // Check for [REMEMBER: ...] and store
+    // --- Extract [REMEMBER: ...] fact and persist ---
     int remIdx = cleanText.indexOf("[REMEMBER:");
     if (remIdx != -1) {
         int remEnd = cleanText.indexOf(']', remIdx);
@@ -269,34 +353,39 @@ void BrainEngine::_parseAndAct(const String& aiText, const String& userMessage, 
             String fact = cleanText.substring(remIdx + 10, remEnd);
             fact.trim();
             int curLen = strlen(_knownFacts);
-            if (curLen < 480) {
-                strncat(_knownFacts, " | ", 511 - curLen);
+            if (curLen < 450 && fact.length() > 3) {
+                if (curLen > 0) strncat(_knownFacts, " | ", 511 - curLen);
                 strncat(_knownFacts, fact.c_str(), 511 - strlen(_knownFacts));
                 _saveProfile();
+                Serial.printf("[Brain] Remembered: %s\n", fact.c_str());
             }
             cleanText = cleanText.substring(0, remIdx) + cleanText.substring(remEnd + 1);
             cleanText.trim();
         }
     }
 
-    // Count words for phoneme length
-    int words = 1;
-    for (int i = 0; i < (int)cleanText.length(); i++) if (cleanText[i] == ' ') words++;
+    // --- Prevent empty or trivially short responses ---
+    if (cleanText.length() < 3) cleanText = "Beep boop!";
 
-    // Update dialogue context
+    Serial.printf("[Brain] AI says [%d%%]: %s\n", intensity, cleanText.c_str());
+
+    // --- Update dialogue context ---
     _pushContext(isAuto ? "(spontaneous)" : userMessage, cleanText);
 
-    // Set subtitle on DisplayEngine so the owner sees what Piku is saying
-    _disp->setSubtitle(cleanText, max(5000, words * 400));
+    // --- Show subtitle on OLED ---
+    int wordCount = 1;
+    for (char c : cleanText) if (c == ' ') wordCount++;
+    int holdMs = max(4500, wordCount * 420);
+    _disp->setSubtitle(cleanText, holdMs);
 
-    // Update SoulEngine with emotion and intensity
+    // --- Trigger soul emotion & servo gesture ---
     _soul->onAIResponseReceived(emotion, intensity, cleanText);
 
-    // Speak phonetically while animating mouth shapes
-    _audio->playPhonemes(words, cleanText.c_str());
+    // --- Speak with phoneme lip-sync ---
+    _audio->playPhonemes(wordCount, cleanText.c_str());
 
-    // If message is longer than screen width, trigger smooth marquee scroll
-    if (cleanText.length() > 20) {
+    // --- Scroll marquee if text is long ---
+    if (cleanText.length() > 22) {
         _disp->startScrollMessage(cleanText, "PIKU AI");
     }
 }
