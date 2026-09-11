@@ -37,6 +37,7 @@ private:
     // Clap state
     int           _clapCount     = 0;
     unsigned long _firstClapTime = 0;
+    bool          _pinReleased   = false;
     Callback      _cbDoubleClap;
 
     void _updateTouch();

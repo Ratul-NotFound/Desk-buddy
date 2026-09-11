@@ -3,7 +3,7 @@
 void SensorEngine::init(AudioEngine* audio) {
     _audio = audio;
 #if ENABLE_SOUND_SENSOR
-    pinMode(MIC_DO_PIN, INPUT);
+    pinMode(MIC_DO_PIN, INPUT_PULLUP);
 #endif
 }
 
@@ -56,20 +56,32 @@ void SensorEngine::_updateClap() {
     if (!_soundEnabled) return;
     unsigned long now = millis();
     if (now < _audio->micMuteUntil) return;
-    if (_clapCount > 0 && (now - _firstClapTime > 650)) _clapCount = 0;
 
-    if (digitalRead(MIC_DO_PIN) == LOW) {
-        if (_clapCount == 0) {
-            _clapCount = 1;
-            _firstClapTime = now;
-            _audio->micMuteUntil = now + 120;
-        } else if (_clapCount == 1 &&
-                   (now - _firstClapTime >= 150) &&
-                   (now - _firstClapTime <= 600)) {
+    // Timeout reset if no second clap within window
+    if (_clapCount > 0 && (now - _firstClapTime > 750)) {
+        _clapCount = 0;
+        _pinReleased = false;
+    }
+
+    int pinState = digitalRead(MIC_DO_PIN);
+
+    // If waiting for second clap, verify pin went quiet (HIGH) in between
+    if (_clapCount == 1) {
+        if (pinState == HIGH) {
+            _pinReleased = true; // silence detected between claps
+        } else if (_pinReleased && (now - _firstClapTime >= 150) && (now - _firstClapTime <= 700)) {
+            // Valid second distinct clap!
             _clapCount = 0;
-            _audio->micMuteUntil = now + 4000;
+            _pinReleased = false;
+            _audio->micMuteUntil = now + 6000;
             if (_cbDoubleClap) _cbDoubleClap();
         }
+    } else if (pinState == LOW) {
+        // First clap detected
+        _clapCount = 1;
+        _pinReleased = false;
+        _firstClapTime = now;
+        _audio->micMuteUntil = now + 120; // ignore clap echo
     }
 #endif
 }

@@ -102,6 +102,12 @@ private:
     bool   _aiInFlight   = false;
     String _lastReply;
 
+    // Anti-repetition: track last 5 emotion tags and last 4 key phrases
+    String _lastEmotionTags[5];   // e.g. "[PARTY", "[EXCITED"
+    int    _emotionTagCount = 0;
+    String _lastPhrases[4];       // first 3 words of last 4 replies
+    int    _phraseCount = 0;
+
     // Private methods
     void   _loadProfile();
     void   _saveProfile();
@@ -110,6 +116,8 @@ private:
     String _callGeminiAPI(const String& builtPrompt);
     void   _parseAndAct(const String& aiText, const String& userMessage, UserIntent intent, bool isAuto);
     void   _pushContext(const String& user, const String& piku);
+    void   _pushEmotionHistory(const String& tag, const String& phrase);
+    String _buildAntiRepeatBlock() const;
     UserIntent _detectIntent(const String& msg);
     void   _updateMood(RobotEmotion emotion, int intensity, UserIntent intent);
     String _moodContextLine() const;

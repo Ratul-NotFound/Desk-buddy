@@ -424,7 +424,7 @@ void SoulEngine::onTouchOverpet() {
 
 void SoulEngine::onDoubleClap() {
     if (millis() < _clapCoolUntil) return;
-    _clapCoolUntil   = millis() + 7000;
+    _clapCoolUntil   = millis() + 15000; // 15-second cooldown to prevent looping
     _lastInteraction = millis();
     _affection       = min(100, _affection + 5);
     triggerEmotion(EMOTION_PARTY_DJ, 100, 6500);

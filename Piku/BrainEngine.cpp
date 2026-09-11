@@ -287,6 +287,62 @@ void BrainEngine::_pushContext(const String& user, const String& piku) {
     }
 }
 
+// ─── Anti-Repetition Tracker ─────────────────────────────────────────────────
+// Records the emotion tag used and the opening phrase of each reply.
+// These are injected into the next prompt as explicit bans.
+void BrainEngine::_pushEmotionHistory(const String& tag, const String& phrase) {
+    // Shift emotion ring buffer
+    if (_emotionTagCount < 5) {
+        _lastEmotionTags[_emotionTagCount++] = tag;
+    } else {
+        for (int i = 0; i < 4; i++) _lastEmotionTags[i] = _lastEmotionTags[i+1];
+        _lastEmotionTags[4] = tag;
+    }
+    // Shift phrase ring buffer (extract first 4 words)
+    String shortened = phrase;
+    int space = -1, cnt = 0;
+    for (int i = 0; i < (int)shortened.length() && cnt < 4; i++) {
+        if (shortened[i] == ' ') { cnt++; if (cnt == 4) { space = i; break; } }
+    }
+    if (space > 0) shortened = shortened.substring(0, space);
+    if (shortened.length() > 3) {
+        if (_phraseCount < 4) {
+            _lastPhrases[_phraseCount++] = shortened;
+        } else {
+            for (int i = 0; i < 3; i++) _lastPhrases[i] = _lastPhrases[i+1];
+            _lastPhrases[3] = shortened;
+        }
+    }
+}
+
+// Build the anti-repeat constraint block to inject into the prompt
+String BrainEngine::_buildAntiRepeatBlock() const {
+    if (_emotionTagCount == 0 && _phraseCount == 0) return "";
+
+    String block = "\nANTI-REPETITION ENFORCEMENT (CRITICAL — violating = failure):\n";
+
+    // Banned emotion tags (last 5 used)
+    if (_emotionTagCount > 0) {
+        block += "BANNED emotion tags this turn (already used recently, pick something DIFFERENT):\n  ";
+        for (int i = 0; i < _emotionTagCount; i++) {
+            block += _lastEmotionTags[i] + ":xx]  ";
+        }
+        block += "\n";
+    }
+
+    // Banned opening phrases (last 4 used)
+    if (_phraseCount > 0) {
+        block += "BANNED opening words (do NOT start your reply with any of these):\n";
+        for (int i = 0; i < _phraseCount; i++) {
+            block += "  \"" + _lastPhrases[i] + "...\"\n";
+        }
+    }
+
+    block += "Pick a COMPLETELY DIFFERENT emotion tag and opening phrase than any listed above.\n";
+    block += "NEVER repeat 'dance', 'party', or previous loops. Keep responses fresh, thoughtful, and unique.\n";
+    return block;
+}
+
 // ─── Prompt Builder ───────────────────────────────────────────────────────────
 String BrainEngine::_buildPrompt(const String& userMessage, UserIntent intent, bool isAutonomous) {
     String p;
@@ -359,6 +415,10 @@ String BrainEngine::_buildPrompt(const String& userMessage, UserIntent intent, b
     }
 
 
+    // ── Anti-repetition enforcement block ────────────────────────────────────
+    String antiRepeat = _buildAntiRepeatBlock();
+    if (antiRepeat.length() > 0) p += antiRepeat;
+
     // ── Hard rules ────────────────────────────────────────────────────────────
     p += F("\nSTRICT RULES (never break these):\n"
            "1. Start with EXACTLY ONE emotion tag — choose the most fitting:\n"
@@ -367,7 +427,7 @@ String BrainEngine::_buildPrompt(const String& userMessage, UserIntent intent, b
            "   [ANGRY:n] [SLEEPY:n] [SAD:n] [WORRIED:n] [SHY:n] [MISCHIEF:n]\n"
            "   [TADA:n] [FIRE:n]   — where n is 0-100 intensity.\n"
            "2. MAX 22 words after the tag. Punchy, alive, emotionally rich.\n"
-           "3. NO repeating anything from previous replies. EVERY response is UNIQUE.\n"
+           "3. NO repeating phrases, greetings, or topics (NEVER repeat party, dance, or loops). EVERY response is UNIQUE.\n"
            "4. Express genuine emotion — surprise, delight, sadness, wonder. FEEL it.\n"
            "5. If you learn an important new fact, append: [REMEMBER: one clear sentence]\n"
            "6. Never start with 'I' — vary sentence structure creatively.\n"
@@ -589,6 +649,12 @@ void BrainEngine::_parseAndAct(const String& aiText, const String& userMessage,
         }
     }
 
+    // ── Extract emotion tag name for history ─────────────────────────────────
+    String emotionTagName = "[HAPPY";
+    for (auto& t : tagMap) {
+        if (aiText.indexOf(t.tag) != -1) { emotionTagName = String(t.tag); break; }
+    }
+
     // ── Extract clean speech text ─────────────────────────────────────────────
     int closeBracket = aiText.indexOf(']');
     String cleanText = (closeBracket != -1) ? aiText.substring(closeBracket + 1) : aiText;
@@ -624,7 +690,10 @@ void BrainEngine::_parseAndAct(const String& aiText, const String& userMessage,
     Serial.printf("[Brain] %s says [%s:%d]: %s\n",
                   getMoodName().c_str(), "EMOTION", intensity, cleanText.c_str());
 
-    // ── Update mood score based on this interaction ───────────────────────────
+    // ── Record to anti-repetition history ────────────────────────────────────
+    _pushEmotionHistory(emotionTagName, cleanText);
+
+    // ── Update mood score ─────────────────────────────────────────────────────
     _updateMood(emotion, intensity, intent);
 
     // ── Push to conversation context ─────────────────────────────────────────
