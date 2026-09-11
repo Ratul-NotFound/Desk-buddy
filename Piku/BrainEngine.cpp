@@ -326,37 +326,38 @@ String BrainEngine::_buildPrompt(const String& userMessage, UserIntent intent, b
     p += "\nHow to respond based on the message type:\n";
     switch (intent) {
         case INTENT_QUESTION:
-            p += F("- " + _ownerName + " asked a QUESTION. Be insightful and clever. "
-                   "Answer it from Piku's unique robotic-pet perspective. Add personality.\n");
+            p += "- " + _ownerName + " asked a QUESTION. Be insightful and clever. "
+                 "Answer it from Piku's unique robotic-pet perspective. Add personality.\n";
             break;
         case INTENT_GREETING:
-            p += F("- " + _ownerName + " is greeting you! React with warm, fresh energy. "
-                   "Don't just say 'hi back' — show genuine excitement or emotion.\n");
+            p += "- " + _ownerName + " is greeting you! React with warm, fresh energy. "
+                 "Don't just say 'hi back' — show genuine excitement or emotion.\n";
             break;
         case INTENT_EMOTIONAL:
-            p += F("- " + _ownerName + " is sharing feelings. Be DEEPLY empathetic. "
-                   "Acknowledge their emotion, show you care. Be a true companion.\n");
+            p += "- " + _ownerName + " is sharing feelings. Be DEEPLY empathetic. "
+                 "Acknowledge their emotion, show you truly care. Be a real companion.\n";
             break;
         case INTENT_PRAISE:
-            p += F("- " + _ownerName + " is praising you! React with proud, excited joy. "
-                   "Maybe be a little bashful or dramatically pleased.\n");
+            p += "- " + _ownerName + " is praising you! React with proud, excited joy. "
+                 "Maybe be a little bashful or dramatically pleased.\n";
             break;
         case INTENT_TEASE:
-            p += F("- " + _ownerName + " is teasing you. Don't be sad — be playfully "
-                   "defensive or humorously dramatic. Show personality!\n");
+            p += "- " + _ownerName + " is teasing you. Don't be sad — be playfully "
+                 "defensive or humorously dramatic. Show personality!\n";
             break;
         case INTENT_STORY:
-            p += F("- " + _ownerName + " wants you to explain or tell a story. "
-                   "Be vivid, imaginative, and entertaining. Keep it SHORT (20 words max).\n");
+            p += "- " + _ownerName + " wants you to explain or tell a story. "
+                 "Be vivid, imaginative, and entertaining. Keep it SHORT (20 words max).\n";
             break;
         case INTENT_AUTONOMOUS:
-            p += F("- You're speaking SPONTANEOUSLY — no prompt. Make it feel natural, "
+            p += F("- Speaking SPONTANEOUSLY — no prompt. Make it feel natural, "
                    "surprising, and totally in-character. Like a thought that just popped up.\n");
             break;
         default:
             p += F("- Respond naturally and in-character. Be yourself — alive and expressive.\n");
             break;
     }
+
 
     // ── Hard rules ────────────────────────────────────────────────────────────
     p += F("\nSTRICT RULES (never break these):\n"
