@@ -272,11 +272,12 @@ void handleStatus() {
     String lr = brain.getLastReply();
     int cb = lr.indexOf(']'); if (cb != -1) { lr = lr.substring(cb+1); lr.trim(); }
     int rm = lr.indexOf("[REMEMBER"); if (rm != -1) lr = lr.substring(0, rm); lr.trim();
+    int mm = lr.indexOf("[MOOD");     if (mm != -1) lr = lr.substring(0, mm); lr.trim();
     // Escape for JSON
     lr.replace("\"","\\\""); lr.replace("\n"," ");
 
     String j;
-    j.reserve(512);
+    j.reserve(600);
     j  = "{";
     j += "\"sta_connected\":"   + String(net.isStaConnected()?"true":"false") + ",";
     j += "\"sta_ip\":\""        + net.getStaIP() + "\",";
@@ -299,6 +300,8 @@ void handleStatus() {
     j += "\"owner_name\":\""     + brain.getOwnerName() + "\",";
     j += "\"onboarding_done\":"  + String(brain.isOnboardingDone()?"true":"false") + ",";
     j += "\"auto_talk_min\":"    + String(soul.getAutoTalkIntervalMinutes()) + ",";
+    j += "\"mood\":\""           + brain.getMoodName() + "\",";
+    j += "\"total_convs\":"      + String(brain.getTotalConversations()) + ",";
     j += "\"last_reply\":\""     + lr + "\"";
     j += "}";
     server.send(200,"application/json",j);
